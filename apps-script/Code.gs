@@ -224,5 +224,38 @@ function doPost(e) {
     }
   }
 
+  // Atomically append a single record to the current state.
+  // This avoids lost-update races where two clients both read stale state,
+  // each add their record locally, and the second write overwrites the first.
+  if (action === "addRecord") {
+    if (body.token !== WRITE_TOKEN) {
+      return response_({ ok: false, error: "unauthorized_write" });
+    }
+
+    const lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+
+    try {
+      const current = readState_();
+      const incoming = normalizeRecords_([body.record]);
+      if (incoming.length === 0) {
+        return response_({ ok: false, error: "invalid_record" });
+      }
+
+      // Deduplicate by id to prevent replayed requests from adding duplicates.
+      const existingIds = new Set(current.records.map((r) => r.id));
+      const toAdd = incoming.filter((r) => !existingIds.has(r.id));
+      if (toAdd.length === 0) {
+        return response_({ ok: true, state: current, duplicate: true });
+      }
+
+      current.records = current.records.concat(toAdd);
+      const saved = writeState_(current);
+      return response_({ ok: true, state: saved });
+    } finally {
+      lock.releaseLock();
+    }
+  }
+
   return response_({ ok: false, error: "unknown_action" });
 }

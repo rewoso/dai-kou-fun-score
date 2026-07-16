@@ -435,6 +435,53 @@ async function saveSharedState(catalog, records) {
   }
 }
 
+/**
+ * Atomically add a single record to the remote state using the addRecord
+ * action, which performs a server-side read-append-write inside a lock.
+ * This prevents lost-update races that occur when two clients read the same
+ * stale state, each append locally, and the later writer overwrites the other.
+ *
+ * On success the local cache is refreshed with the server's authoritative state.
+ * Falls back to local-only storage if remote is unavailable.
+ */
+async function addSharedRecord(record) {
+  // Always persist locally first so the UI reflects the change immediately.
+  const localRecords = loadRecords();
+  const alreadyLocal = localRecords.some((r) => r.id === record.id);
+  if (!alreadyLocal) {
+    saveRecords([...localRecords, record]);
+  }
+
+  if (!isRemoteEnabled()) {
+    return { ok: true, source: "local" };
+  }
+
+  try {
+    const result = await remoteFetchJson({
+      action: "addRecord",
+      token: REMOTE_CONFIG.writeToken,
+      record
+    });
+
+    if (!result || result.ok !== true) {
+      throw new Error(result?.error || "remote addRecord failed");
+    }
+
+    // Sync local cache with authoritative server state.
+    if (result.state) {
+      saveRecords(normalizeState(result.state).records);
+    }
+
+    return { ok: true, source: "remote" };
+  } catch (error) {
+    return {
+      ok: false,
+      source: "local-only",
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
 function formatDate(iso) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) {

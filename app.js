@@ -524,13 +524,20 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
       createdAt: new Date().toISOString()
     };
 
+    // Optimistically update local state before the async call.
     const nextRecords = [...recordsRef.get(), payload];
     recordsRef.set(nextRecords);
 
     if (isRemoteEnabled()) showLoading("保存中...");
     let saveResult;
     try {
-      saveResult = await saveSharedState(catalog, nextRecords);
+      // Use addSharedRecord instead of saveSharedState to avoid lost-update
+      // races: the server atomically appends within a lock rather than
+      // overwriting the full state with potentially stale client data.
+      saveResult = await addSharedRecord(payload);
+      // Sync local records ref with the authoritative server state if available.
+      const synced = loadRecords();
+      recordsRef.set(synced);
     } finally {
       hideLoading();
     }
