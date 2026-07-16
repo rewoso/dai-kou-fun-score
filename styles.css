@@ -178,6 +178,42 @@ th {
   font-size: 0.92rem;
 }
 
+.difficulty-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 92px;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.difficulty-pill.difficulty-normal {
+  background: #2e7d32;
+  color: #effff1;
+  border-color: #4caf50;
+}
+
+.difficulty-pill.difficulty-hard {
+  background: #b58900;
+  color: #fffbe6;
+  border-color: #f0c419;
+}
+
+.difficulty-pill.difficulty-maximum {
+  background: #b3261e;
+  color: #fff0f0;
+  border-color: #ff6b6b;
+}
+
+.difficulty-pill.difficulty-sc {
+  background: #6a1b9a;
+  color: #f7efff;
+  border-color: #a86bdc;
+}
+
 tbody tr {
   animation: fadeIn 220ms ease;
 }
@@ -283,6 +319,32 @@ tbody tr {
   background: linear-gradient(120deg, var(--accent), #17ab86);
   border-color: transparent;
   color: #032d20;
+}
+
+.choice-btn.difficulty-normal.is-active,
+.choice-btn.difficulty-hard.is-active,
+.choice-btn.difficulty-maximum.is-active,
+.choice-btn.difficulty-sc.is-active {
+}
+
+.choice-btn.difficulty-normal.is-active {
+  background: #2e7d32;
+  color: #effff1;
+}
+
+.choice-btn.difficulty-hard.is-active {
+  background: #b58900;
+  color: #fffbe6;
+}
+
+.choice-btn.difficulty-maximum.is-active {
+  background: #b3261e;
+  color: #fff0f0;
+}
+
+.choice-btn.difficulty-sc.is-active {
+  background: #6a1b9a;
+  color: #f7efff;
 }
 
 .choice-btn.is-hidden {

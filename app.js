@@ -78,11 +78,26 @@ function renderTable(rows) {
       <td>${row.user}</td>
       <td>${row.song}</td>
       <td>${row.button}</td>
-      <td>${row.difficulty}</td>
+      <td><span class="difficulty-pill ${getDifficultyDisplayClass(row.difficulty)}">${row.difficulty}</span></td>
       <td>${Number(row.score).toLocaleString("ja-JP")}</td>
       <td>${formatDate(row.createdAt)}</td>
     `;
     body.appendChild(tr);
+  }
+}
+
+function getDifficultyDisplayClass(value) {
+  switch (value) {
+    case "NORMAL":
+      return "difficulty-normal";
+    case "HARD":
+      return "difficulty-hard";
+    case "MAXIMUM":
+      return "difficulty-maximum";
+    case "SC":
+      return "difficulty-sc";
+    default:
+      return "";
   }
 }
 
@@ -98,6 +113,11 @@ function renderChoiceButtons(containerId, values, selected, onSelect, hidden = [
     button.type = "button";
     button.className = "choice-btn";
     button.textContent = value;
+    const difficultyClass = getDifficultyButtonClass(value);
+
+    if (difficultyClass) {
+      button.classList.add(difficultyClass);
+    }
 
     if (value === selected) {
       button.classList.add("is-active");
@@ -112,6 +132,21 @@ function renderChoiceButtons(containerId, values, selected, onSelect, hidden = [
   }
 }
 
+function getDifficultyButtonClass(value) {
+  switch (value) {
+    case "NORMAL":
+      return "difficulty-normal";
+    case "HARD":
+      return "difficulty-hard";
+    case "MAXIMUM":
+      return "difficulty-maximum";
+    case "SC":
+      return "difficulty-sc";
+    default:
+      return "";
+  }
+}
+
 function initRanking(catalog, recordsRef) {
   const rerender = () => {
     const records = recordsRef.get();
@@ -119,7 +154,7 @@ function initRanking(catalog, recordsRef) {
     const users = uniqueSorted([...catalog.users, ...records.map((r) => r.user)]);
     const songs = uniqueSorted([...getSongNames(catalog), ...records.map((r) => r.song)]);
     const buttons = uniqueSorted([...catalog.buttons, ...records.map((r) => r.button)]);
-    const diffs = uniqueSorted([...catalog.difficulties, ...records.map((r) => r.difficulty)]);
+    const diffs = sortDifficulties([...catalog.difficulties, ...records.map((r) => r.difficulty)]);
 
     setSelectOptions(document.getElementById("filter-user"), users, "すべて");
     setSelectOptions(document.getElementById("filter-song"), songs, "すべて");

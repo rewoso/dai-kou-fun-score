@@ -38,7 +38,7 @@ function mergeImported(currentCatalog, currentRecords, payload) {
     users: uniqueSorted([...currentCatalog.users, ...incomingCatalog.users]),
     songs: [...currentCatalog.songs, ...incomingCatalog.songs],
     buttons: uniqueSorted([...(currentCatalog.buttons || []), ...(incomingCatalog.buttons || [])]),
-    difficulties: uniqueSorted([...(currentCatalog.difficulties || []), ...(incomingCatalog.difficulties || [])])
+    difficulties: sortDifficulties([...(currentCatalog.difficulties || []), ...(incomingCatalog.difficulties || [])])
   });
 
   const mergedRecordsMap = new Map();

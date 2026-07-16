@@ -46,6 +46,8 @@ const PASSWORD_HASHES = {
   admin: "9ff93f7009c823d174bed269b6ff4aefebe702e73f114348cefeb28d05120e08"
 };
 
+const DIFFICULTY_ORDER = ["NORMAL", "HARD", "MAXIMUM", "SC"];
+
 const REMOTE_CONFIG = {
   // Google Apps Script Web App URL. Empty string keeps local-only mode.
   apiUrl: "",
@@ -114,7 +116,7 @@ function normalizeCatalog(catalog) {
     : [...DEFAULT_CATALOG.buttons];
 
   const difficulties = Array.isArray(source.difficulties) && source.difficulties.length > 0
-    ? uniqueSorted(source.difficulties)
+    ? sortDifficulties(source.difficulties)
     : [...DEFAULT_CATALOG.difficulties];
 
   const rawSongs = Array.isArray(source.songs) && source.songs.length > 0
@@ -137,7 +139,7 @@ function normalizeCatalog(catalog) {
 
       if (song && typeof song === "object" && song.name) {
         const diffs = Array.isArray(song.difficulties) && song.difficulties.length > 0
-          ? uniqueSorted(song.difficulties)
+          ? sortDifficulties(song.difficulties)
           : [...difficulties];
 
         const incomingByButton = song.difficultiesByButton && typeof song.difficultiesByButton === "object"
@@ -147,7 +149,7 @@ function normalizeCatalog(catalog) {
         const normalizedByButton = Object.fromEntries(
           buttons.map((button) => {
             const buttonDiffs = Array.isArray(incomingByButton[button]) && incomingByButton[button].length > 0
-              ? uniqueSorted(incomingByButton[button])
+              ? sortDifficulties(incomingByButton[button])
               : [...diffs];
             return [button, buttonDiffs];
           })
@@ -178,11 +180,11 @@ function normalizeCatalog(catalog) {
 
     uniqueSongsMap.set(song.name, {
       name: song.name,
-      difficulties: uniqueSorted([...(existing.difficulties || []), ...(song.difficulties || [])]),
+      difficulties: sortDifficulties([...(existing.difficulties || []), ...(song.difficulties || [])]),
       difficultiesByButton: Object.fromEntries(
         buttons.map((button) => [
           button,
-          uniqueSorted([
+          sortDifficulties([
             ...((existing.difficultiesByButton && existing.difficultiesByButton[button]) || []),
             ...((song.difficultiesByButton && song.difficultiesByButton[button]) || [])
           ])
@@ -199,13 +201,13 @@ function normalizeCatalog(catalog) {
     const normalizedByButton = Object.fromEntries(
       buttons.map((button) => {
         const buttonDiffs = Array.isArray(byButton[button]) && byButton[button].length > 0
-          ? uniqueSorted(byButton[button])
-          : uniqueSorted(song.difficulties || difficulties);
+          ? sortDifficulties(byButton[button])
+          : sortDifficulties(song.difficulties || difficulties);
         return [button, buttonDiffs];
       })
     );
 
-    const mergedDiffs = uniqueSorted(buttons.flatMap((button) => normalizedByButton[button] || []));
+    const mergedDiffs = sortDifficulties(buttons.flatMap((button) => normalizedByButton[button] || []));
 
     return {
       name: song.name,
@@ -491,4 +493,25 @@ async function initPasswordGate() {
 
 function uniqueSorted(values) {
   return [...new Set(values)].sort((a, b) => String(a).localeCompare(String(b), "ja"));
+}
+
+function sortDifficulties(values) {
+  const uniqueValues = [...new Set(values.map((value) => String(value)))];
+
+  return uniqueValues.sort((a, b) => {
+    const aIndex = DIFFICULTY_ORDER.indexOf(a);
+    const bIndex = DIFFICULTY_ORDER.indexOf(b);
+
+    if (aIndex !== -1 || bIndex !== -1) {
+      if (aIndex === -1) {
+        return 1;
+      }
+      if (bIndex === -1) {
+        return -1;
+      }
+      return aIndex - bIndex;
+    }
+
+    return String(a).localeCompare(String(b), "ja");
+  });
 }
