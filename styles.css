@@ -241,6 +241,13 @@ th {
   font-size: 0.92rem;
 }
 
+.ranking table th:nth-child(6),
+.ranking table th:nth-child(7),
+.ranking table td:nth-child(6),
+.ranking table td:nth-child(7) {
+  text-align: right;
+}
+
 .ranking-song-trigger {
   width: auto;
   max-width: 100%;

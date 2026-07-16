@@ -93,6 +93,7 @@ function renderTable(rows, onSongClick) {
   for (const [index, row] of rows.entries()) {
     const tr = document.createElement("tr");
     const score = Number(row.score) || 0;
+    const scoreRate = (score / 10000).toFixed(2);
     const scoreRank = getScoreRank(score);
     const rankClasses = getScoreRankClasses(scoreRank, score);
     tr.innerHTML = `
@@ -102,6 +103,7 @@ function renderTable(rows, onSongClick) {
       <td><span class="button-pill ${getButtonDisplayClass(row.button)}">${row.button}</span></td>
       <td><span class="difficulty-pill ${getDifficultyDisplayClass(row.difficulty)}">${row.difficulty}</span></td>
       <td>${score.toLocaleString("ja-JP")}</td>
+      <td>${scoreRate}%</td>
       <td><span class="rank-pill ${rankClasses}">${scoreRank}</span></td>
       <td>${formatDate(row.createdAt)}</td>
     `;
