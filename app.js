@@ -8,6 +8,17 @@ function applyFilters(records, filters) {
   });
 }
 
+function applyRecentUpdateLimit(records, limit) {
+  const normalizedLimit = Number(limit);
+  if (!Number.isFinite(normalizedLimit) || normalizedLimit <= 0) {
+    return records;
+  }
+
+  return [...records]
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, normalizedLimit);
+}
+
 function toRankingRows(records) {
   const bestByChartAndUser = new Map();
 
@@ -165,14 +176,17 @@ function initRanking(catalog, recordsRef) {
       user: document.getElementById("filter-user")?.value || "",
       song: document.getElementById("filter-song")?.value || "",
       button: document.getElementById("filter-button")?.value || "",
-      difficulty: document.getElementById("filter-difficulty")?.value || ""
+      difficulty: document.getElementById("filter-difficulty")?.value || "",
+      recentLimit: document.getElementById("filter-recent-limit")?.value || ""
     };
 
-    const rows = toRankingRows(applyFilters(records, filters));
+    const filtered = applyFilters(records, filters);
+    const recentOnly = applyRecentUpdateLimit(filtered, filters.recentLimit);
+    const rows = toRankingRows(recentOnly);
     renderTable(rows);
   };
 
-  for (const id of ["filter-user", "filter-song", "filter-button", "filter-difficulty"]) {
+  for (const id of ["filter-user", "filter-song", "filter-button", "filter-difficulty", "filter-recent-limit"]) {
     document.getElementById(id)?.addEventListener("change", rerender);
   }
 
@@ -182,6 +196,10 @@ function initRanking(catalog, recordsRef) {
       if (select) {
         select.value = "";
       }
+    }
+    const recentLimitSelect = document.getElementById("filter-recent-limit");
+    if (recentLimitSelect) {
+      recentLimitSelect.value = "";
     }
     rerender();
   });
