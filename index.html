@@ -50,7 +50,11 @@
 
   <main class="layout">
     <section class="panel">
-      <h2>スコア入力</h2>
+      <div class="panel-head">
+        <h2>スコア入力</h2>
+        <button type="button" id="score-form-toggle" class="toggle-btn" aria-expanded="true" aria-controls="score-form-body">閉じる</button>
+      </div>
+      <div id="score-form-body">
       <form id="user-score-form" class="stack-form">
         <label>プレイヤー名
           <select id="entry-user" required></select>
@@ -81,6 +85,7 @@
         <button type="submit">スコア登録</button>
       </form>
       <p id="entry-message" class="muted" aria-live="polite"></p>
+      </div>
     </section>
 
     <section class="panel filters">

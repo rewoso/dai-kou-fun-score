@@ -605,6 +605,23 @@ async function main() {
 
   const rerenderRanking = initRanking(catalog, recordsRef);
   initScoreEntry(catalog, recordsRef, rerenderRanking);
+
+  const scoreFormToggle = document.getElementById("score-form-toggle");
+  const scoreFormBody = document.getElementById("score-form-body");
+  if (scoreFormToggle && scoreFormBody) {
+    scoreFormToggle.addEventListener("click", () => {
+      const isOpen = scoreFormToggle.getAttribute("aria-expanded") === "true";
+      if (isOpen) {
+        scoreFormBody.classList.add("is-collapsed");
+        scoreFormToggle.setAttribute("aria-expanded", "false");
+        scoreFormToggle.textContent = "開く";
+      } else {
+        scoreFormBody.classList.remove("is-collapsed");
+        scoreFormToggle.setAttribute("aria-expanded", "true");
+        scoreFormToggle.textContent = "閉じる";
+      }
+    });
+  }
 }
 
 main();
