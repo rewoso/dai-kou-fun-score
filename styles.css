@@ -273,6 +273,42 @@ th {
   border-color: #a86bdc;
 }
 
+.button-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.button-pill.button-4b {
+  background: #1565c0;
+  color: #eef6ff;
+  border-color: #42a5f5;
+}
+
+.button-pill.button-5b {
+  background: #00695c;
+  color: #e8fff8;
+  border-color: #26a69a;
+}
+
+.button-pill.button-6b {
+  background: #e65100;
+  color: #fff4e9;
+  border-color: #ff8a50;
+}
+
+.button-pill.button-8b {
+  background: #ad1457;
+  color: #fff0f7;
+  border-color: #ec407a;
+}
+
 tbody tr {
   animation: fadeIn 220ms ease;
 }
@@ -404,6 +440,26 @@ tbody tr {
 .choice-btn.difficulty-sc.is-active {
   background: #6a1b9a;
   color: #f7efff;
+}
+
+.choice-btn.button-4b.is-active {
+  background: #1565c0;
+  color: #eef6ff;
+}
+
+.choice-btn.button-5b.is-active {
+  background: #00695c;
+  color: #e8fff8;
+}
+
+.choice-btn.button-6b.is-active {
+  background: #e65100;
+  color: #fff4e9;
+}
+
+.choice-btn.button-8b.is-active {
+  background: #ad1457;
+  color: #fff0f7;
 }
 
 .choice-btn.is-hidden {

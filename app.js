@@ -96,7 +96,7 @@ function renderTable(rows) {
       <td>${index + 1}</td>
       <td>${row.user}</td>
       <td>${row.song}</td>
-      <td>${row.button}</td>
+      <td><span class="button-pill ${getButtonDisplayClass(row.button)}">${row.button}</span></td>
       <td><span class="difficulty-pill ${getDifficultyDisplayClass(row.difficulty)}">${row.difficulty}</span></td>
       <td>${Number(row.score).toLocaleString("ja-JP")}</td>
       <td>${formatDate(row.createdAt)}</td>
@@ -133,9 +133,14 @@ function renderChoiceButtons(containerId, values, selected, onSelect, hidden = [
     button.className = "choice-btn";
     button.textContent = value;
     const difficultyClass = getDifficultyButtonClass(value);
+    const buttonClass = getButtonDisplayClass(value);
 
     if (difficultyClass) {
       button.classList.add(difficultyClass);
+    }
+
+    if (buttonClass) {
+      button.classList.add(buttonClass);
     }
 
     if (value === selected) {
@@ -148,6 +153,21 @@ function renderChoiceButtons(containerId, values, selected, onSelect, hidden = [
 
     button.addEventListener("click", () => onSelect(value));
     container.appendChild(button);
+  }
+}
+
+function getButtonDisplayClass(value) {
+  switch (value) {
+    case "4B":
+      return "button-4b";
+    case "5B":
+      return "button-5b";
+    case "6B":
+      return "button-6b";
+    case "8B":
+      return "button-8b";
+    default:
+      return "";
   }
 }
 
