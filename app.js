@@ -2,9 +2,11 @@ function applyFilters(records, filters) {
   return records.filter((record) => {
     const userOk = !filters.user || record.user === filters.user;
     const songOk = !filters.song || record.song === filters.song;
+    const songQuery = (filters.songQuery || "").trim().toLowerCase();
+    const songQueryOk = !songQuery || String(record.song || "").toLowerCase().includes(songQuery);
     const buttonOk = !filters.button || record.button === filters.button;
     const diffOk = !filters.difficulty || record.difficulty === filters.difficulty;
-    return userOk && songOk && buttonOk && diffOk;
+    return userOk && songOk && songQueryOk && buttonOk && diffOk;
   });
 }
 
@@ -175,6 +177,7 @@ function initRanking(catalog, recordsRef) {
     const filters = {
       user: document.getElementById("filter-user")?.value || "",
       song: document.getElementById("filter-song")?.value || "",
+      songQuery: document.getElementById("filter-song-query")?.value || "",
       button: document.getElementById("filter-button")?.value || "",
       difficulty: document.getElementById("filter-difficulty")?.value || "",
       recentLimit: document.getElementById("filter-recent-limit")?.value || ""
@@ -186,9 +189,10 @@ function initRanking(catalog, recordsRef) {
     renderTable(rows);
   };
 
-  for (const id of ["filter-user", "filter-song", "filter-button", "filter-difficulty", "filter-recent-limit"]) {
+  for (const id of ["filter-user", "filter-song", "filter-song-query", "filter-button", "filter-difficulty", "filter-recent-limit"]) {
     document.getElementById(id)?.addEventListener("change", rerender);
   }
+  document.getElementById("filter-song-query")?.addEventListener("input", rerender);
 
   document.getElementById("clear-filters")?.addEventListener("click", () => {
     for (const id of ["filter-user", "filter-song", "filter-button", "filter-difficulty"]) {
@@ -196,6 +200,10 @@ function initRanking(catalog, recordsRef) {
       if (select) {
         select.value = "";
       }
+    }
+    const songQueryInput = document.getElementById("filter-song-query");
+    if (songQueryInput) {
+      songQueryInput.value = "";
     }
     const recentLimitSelect = document.getElementById("filter-recent-limit");
     if (recentLimitSelect) {
