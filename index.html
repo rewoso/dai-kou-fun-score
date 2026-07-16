@@ -71,10 +71,18 @@
     <section class="panel filters">
       <h2>絞り込み</h2>
       <div class="filter-grid">
-        <label>
-          ユーザー名
-          <select id="filter-user"><option value="">すべて</option></select>
-        </label>
+        <div class="filter-user-field">
+          <label for="filter-user">ユーザー名</label>
+          <div class="filter-user-control">
+            <select id="filter-user"><option value="">すべて</option></select>
+            <label class="inline-toggle" for="filter-user-multi">
+              <input id="filter-user-multi" type="checkbox">
+              複数選択する
+            </label>
+          </div>
+          <div id="filter-user-extra-list" class="filter-user-extra-list" hidden></div>
+          <button id="filter-user-add" type="button" class="secondary user-add-btn" hidden>ユーザー追加</button>
+        </div>
         <label>
           曲名フィルタ
           <input id="filter-song-query" type="text" placeholder="曲名を入力して絞り込み">

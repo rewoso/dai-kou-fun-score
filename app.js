@@ -1,6 +1,12 @@
 function applyFilters(records, filters) {
   return records.filter((record) => {
-    const userOk = !filters.user || record.user === filters.user;
+    const multiUsers = Array.isArray(filters.users)
+      ? filters.users.filter(Boolean)
+      : [];
+    const selectedUsers = multiUsers.length > 0
+      ? multiUsers
+      : (filters.user ? [filters.user] : []);
+    const userOk = selectedUsers.length === 0 || selectedUsers.includes(record.user);
     const songOk = !filters.song || record.song === filters.song;
     const songQuery = (filters.songQuery || "").trim().toLowerCase();
     const songQueryOk = !songQuery || String(record.song || "").toLowerCase().includes(songQuery);
@@ -161,21 +167,131 @@ function getDifficultyButtonClass(value) {
 }
 
 function initRanking(catalog, recordsRef) {
+  const userSelect = document.getElementById("filter-user");
+  const userMultiToggle = document.getElementById("filter-user-multi");
+  const userExtraList = document.getElementById("filter-user-extra-list");
+  const userAddButton = document.getElementById("filter-user-add");
+  let latestUsers = [];
+
+  const getExtraUserSelects = () => {
+    if (!userExtraList) {
+      return [];
+    }
+
+    return Array.from(userExtraList.querySelectorAll("select"));
+  };
+
+  const updateUserAddButtonState = () => {
+    if (!userAddButton) {
+      return;
+    }
+
+    if (!userMultiToggle?.checked) {
+      userAddButton.hidden = true;
+      userAddButton.disabled = false;
+      userAddButton.title = "";
+      return;
+    }
+
+    const maxExtraSelectCount = Math.max(0, latestUsers.length - 1);
+    const currentExtraSelectCount = getExtraUserSelects().length;
+    const canAdd = currentExtraSelectCount < maxExtraSelectCount;
+
+    userAddButton.hidden = !canAdd;
+    userAddButton.disabled = false;
+    userAddButton.title = "";
+  };
+
+  const addUserExtraSelect = (selectedValue = "") => {
+    if (!userExtraList) {
+      return;
+    }
+
+    const maxExtraSelectCount = Math.max(0, latestUsers.length - 1);
+    if (getExtraUserSelects().length >= maxExtraSelectCount) {
+      updateUserAddButtonState();
+      return;
+    }
+
+    const row = document.createElement("div");
+    row.className = "filter-user-extra-row";
+
+    const select = document.createElement("select");
+    setSelectOptions(select, latestUsers, "すべて");
+    if (selectedValue && latestUsers.includes(selectedValue)) {
+      select.value = selectedValue;
+    }
+    select.addEventListener("change", rerender);
+
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "secondary user-remove-btn";
+    removeButton.textContent = "削除";
+    removeButton.addEventListener("click", () => {
+      row.remove();
+      updateUserAddButtonState();
+      rerender();
+    });
+
+    row.appendChild(select);
+    row.appendChild(removeButton);
+    userExtraList.appendChild(row);
+    updateUserAddButtonState();
+  };
+
+  const setUserFilterMode = (enabled) => {
+    if (!userExtraList || !userAddButton) {
+      return;
+    }
+
+    userExtraList.hidden = !enabled;
+    userAddButton.hidden = !enabled;
+
+    if (!enabled) {
+      userExtraList.innerHTML = "";
+      updateUserAddButtonState();
+      return;
+    }
+
+    if (userExtraList.children.length === 0) {
+      addUserExtraSelect("");
+    }
+
+    updateUserAddButtonState();
+  };
+
+  const getSelectedUsersFromDropdowns = () => {
+    if (!userSelect || !userMultiToggle?.checked) {
+      return [];
+    }
+
+    const users = [userSelect.value, ...getExtraUserSelects().map((select) => select.value)]
+      .filter(Boolean);
+    return [...new Set(users)];
+  };
+
   const rerender = () => {
     const records = recordsRef.get();
 
-    const users = uniqueSorted([...catalog.users, ...records.map((r) => r.user)]);
+    latestUsers = uniqueSorted([...catalog.users, ...records.map((r) => r.user)]);
     const songs = uniqueSorted([...getSongNames(catalog), ...records.map((r) => r.song)]);
     const buttons = uniqueSorted([...catalog.buttons, ...records.map((r) => r.button)]);
     const diffs = sortDifficulties([...catalog.difficulties, ...records.map((r) => r.difficulty)]);
 
-    setSelectOptions(document.getElementById("filter-user"), users, "すべて");
+    setSelectOptions(userSelect, latestUsers, "すべて");
+    for (const extraSelect of getExtraUserSelects()) {
+      setSelectOptions(extraSelect, latestUsers, "すべて");
+    }
+    updateUserAddButtonState();
     setSelectOptions(document.getElementById("filter-song"), songs, "すべて");
     setSelectOptions(document.getElementById("filter-button"), buttons, "すべて");
     setSelectOptions(document.getElementById("filter-difficulty"), diffs, "すべて");
 
+    const isUserMulti = Boolean(userMultiToggle?.checked);
+
     const filters = {
-      user: document.getElementById("filter-user")?.value || "",
+      users: isUserMulti ? getSelectedUsersFromDropdowns() : [],
+      user: !isUserMulti ? (userSelect?.value || "") : "",
       song: document.getElementById("filter-song")?.value || "",
       songQuery: document.getElementById("filter-song-query")?.value || "",
       button: document.getElementById("filter-button")?.value || "",
@@ -193,9 +309,33 @@ function initRanking(catalog, recordsRef) {
     document.getElementById(id)?.addEventListener("change", rerender);
   }
   document.getElementById("filter-song-query")?.addEventListener("input", rerender);
+  userAddButton?.addEventListener("click", () => {
+    addUserExtraSelect("");
+  });
+
+  userMultiToggle?.addEventListener("change", () => {
+    setUserFilterMode(Boolean(userMultiToggle.checked));
+    rerender();
+  });
 
   document.getElementById("clear-filters")?.addEventListener("click", () => {
+    if (userSelect) {
+      userSelect.value = "";
+    }
+
+    if (userExtraList) {
+      if (userMultiToggle?.checked) {
+        userExtraList.innerHTML = "";
+        addUserExtraSelect("");
+      } else {
+        userExtraList.innerHTML = "";
+      }
+    }
+
     for (const id of ["filter-user", "filter-song", "filter-button", "filter-difficulty"]) {
+      if (id === "filter-user") {
+        continue;
+      }
       const select = document.getElementById(id);
       if (select) {
         select.value = "";
@@ -212,6 +352,7 @@ function initRanking(catalog, recordsRef) {
     rerender();
   });
 
+  setUserFilterMode(Boolean(userMultiToggle?.checked));
   rerender();
   return rerender;
 }
