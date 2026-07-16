@@ -508,6 +508,12 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
       return;
     }
 
+    // 登録前に同一曲+ボタン+難易度の全ユーザー最高スコアを確認
+    const prevBest = recordsRef.get()
+      .filter((r) => r.song === song && r.button === button && r.difficulty === difficulty)
+      .reduce((max, r) => Math.max(max, Number(r.score)), -Infinity);
+    const isNewBest = score > prevBest || prevBest === -Infinity;
+
     const payload = {
       id: crypto.randomUUID(),
       user,
@@ -532,10 +538,30 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
       ? `${user} / ${song} のスコアを登録しました。`
       : `ローカル保存のみ成功。共有反映失敗: ${saveResult.error}`;
 
+    if (isNewBest) {
+      showDaikoFun();
+    }
+
     scoreInput.value = "";
     scoreInput.focus();
     rerenderRanking();
   });
+}
+
+function showDaikoFun() {
+  const overlay = document.getElementById("daiko-fun-overlay");
+  if (!overlay) return;
+
+  overlay.hidden = false;
+
+  const dismiss = () => {
+    overlay.hidden = true;
+    overlay.removeEventListener("click", dismiss);
+    clearTimeout(timer);
+  };
+
+  overlay.addEventListener("click", dismiss);
+  const timer = setTimeout(dismiss, 4000);
 }
 
 async function main() {
