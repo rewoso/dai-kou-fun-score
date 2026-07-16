@@ -2,6 +2,7 @@
 // Copy the Web App URL into common.js -> REMOTE_CONFIG.apiUrl
 
 const FILE_NAME = "djmax-ranking-data.json";
+const SONG_CATALOG_FILE_NAME = "djmax-song-catalog.json";
 const READ_TOKEN = "djmax-read-token";
 const WRITE_TOKEN = "djmax-write-token";
 // Optional: set folder ID to place JSON under Shared Drive folder.
@@ -11,9 +12,29 @@ const TARGET_FOLDER_ID = "";
 function defaultCatalog_() {
   return {
     users: ["PLAYER-1"],
-    songs: ["glory day"],
+    songs: [
+      {
+        name: "glory day",
+        difficulties: ["NORMAL", "HARD", "MAXIMUM"],
+        difficultiesByButton: {
+          "4B": ["NORMAL", "HARD", "MAXIMUM"],
+          "5B": ["NORMAL", "HARD", "MAXIMUM"],
+          "6B": ["NORMAL", "HARD", "MAXIMUM"],
+          "8B": ["NORMAL", "HARD", "MAXIMUM"]
+        }
+      }
+    ],
     buttons: ["4B", "5B", "6B", "8B"],
     difficulties: ["NORMAL", "HARD", "MAXIMUM", "SC"]
+  };
+}
+
+function defaultSongCatalog_() {
+  const base = defaultCatalog_();
+  return {
+    songs: base.songs,
+    buttons: base.buttons,
+    difficulties: base.difficulties
   };
 }
 
@@ -24,6 +45,15 @@ function normalizeCatalog_(catalog) {
     songs: Array.isArray(source.songs) && source.songs.length ? source.songs : defaultCatalog_().songs,
     buttons: Array.isArray(source.buttons) && source.buttons.length ? source.buttons : defaultCatalog_().buttons,
     difficulties: Array.isArray(source.difficulties) && source.difficulties.length ? source.difficulties : defaultCatalog_().difficulties
+  };
+}
+
+function normalizeSongCatalog_(catalog) {
+  const source = catalog && typeof catalog === "object" ? catalog : {};
+  return {
+    songs: Array.isArray(source.songs) && source.songs.length ? source.songs : defaultSongCatalog_().songs,
+    buttons: Array.isArray(source.buttons) && source.buttons.length ? source.buttons : defaultSongCatalog_().buttons,
+    difficulties: Array.isArray(source.difficulties) && source.difficulties.length ? source.difficulties : defaultSongCatalog_().difficulties
   };
 }
 
@@ -69,6 +99,21 @@ function getOrCreateFile_() {
   return DriveApp.createFile(FILE_NAME, JSON.stringify(initial));
 }
 
+function getOrCreateSongCatalogFile_() {
+  const folder = getTargetFolder_();
+  const files = folder ? folder.getFilesByName(SONG_CATALOG_FILE_NAME) : DriveApp.getFilesByName(SONG_CATALOG_FILE_NAME);
+  if (files.hasNext()) {
+    return files.next();
+  }
+
+  const initial = normalizeSongCatalog_({});
+  if (folder) {
+    return folder.createFile(SONG_CATALOG_FILE_NAME, JSON.stringify(initial));
+  }
+
+  return DriveApp.createFile(SONG_CATALOG_FILE_NAME, JSON.stringify(initial));
+}
+
 function getTargetFolder_() {
   if (!TARGET_FOLDER_ID) {
     return null;
@@ -95,6 +140,24 @@ function readState_() {
 function writeState_(state) {
   const file = getOrCreateFile_();
   const normalized = normalizeState_(state);
+  file.setContent(JSON.stringify(normalized));
+  return normalized;
+}
+
+function readSongCatalog_() {
+  const file = getOrCreateSongCatalogFile_();
+  const text = file.getBlob().getDataAsString("UTF-8");
+
+  try {
+    return normalizeSongCatalog_(JSON.parse(text));
+  } catch (_e) {
+    return normalizeSongCatalog_({});
+  }
+}
+
+function writeSongCatalog_(catalog) {
+  const file = getOrCreateSongCatalogFile_();
+  const normalized = normalizeSongCatalog_(catalog);
   file.setContent(JSON.stringify(normalized));
   return normalized;
 }
@@ -132,6 +195,30 @@ function doPost(e) {
     try {
       const saved = writeState_(body.state);
       return response_({ ok: true, state: saved });
+    } finally {
+      lock.releaseLock();
+    }
+  }
+
+  if (action === "getSongCatalog") {
+    if (body.token !== READ_TOKEN) {
+      return response_({ ok: false, error: "unauthorized_read" });
+    }
+
+    return response_({ ok: true, catalog: readSongCatalog_() });
+  }
+
+  if (action === "setSongCatalog") {
+    if (body.token !== WRITE_TOKEN) {
+      return response_({ ok: false, error: "unauthorized_write" });
+    }
+
+    const lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+
+    try {
+      const saved = writeSongCatalog_(body.catalog);
+      return response_({ ok: true, catalog: saved });
     } finally {
       lock.releaseLock();
     }

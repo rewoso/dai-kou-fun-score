@@ -227,7 +227,13 @@ tbody tr {
 }
 
 .auth-form input {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.auth-form button {
+  width: auto;
+  white-space: nowrap;
 }
 
 .error-message {
@@ -248,6 +254,43 @@ tbody tr {
   margin-top: 0.8rem;
   display: grid;
   gap: 0.8rem;
+}
+
+.picker-label {
+  margin: 0 0 0.45rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.choice-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.choice-btn {
+  width: auto;
+  min-width: 72px;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  background: #15313d;
+  border: 1px solid #2e5568;
+  color: #c3e8fa;
+  font-weight: 600;
+}
+
+.choice-btn.is-active {
+  background: linear-gradient(120deg, var(--accent), #17ab86);
+  border-color: transparent;
+  color: #032d20;
+}
+
+.choice-btn.is-hidden {
+  display: none;
+}
+
+#player-select {
+  min-height: 220px;
 }
 
 .row-with-action {

@@ -6,8 +6,8 @@ GitHub Pages上で動く、シンプルなDJMAXスコアランキングです。
 - 管理者ページ: `admin.html`
 - アカウント管理なし
 - 利用者用と管理者用で別パスワード
-- 管理者ページでスコア登録
-- 利用者ページでランキング表示
+- 管理者ページでプレイヤー管理
+- 利用者ページでスコア入力とランキング表示
 - Google Apps Script + Google Drive JSON で共有保存対応
 
 ## 初期パスワード
@@ -20,18 +20,27 @@ GitHub Pages上で動く、シンプルなDJMAXスコアランキングです。
 ## 使い方
 
 1. 管理者ページ (`admin.html`) へアクセス
-2. ユーザー名・曲名・ボタン数・難易度・スコアを入力して登録
-3. 利用者ページ (`index.html`) でランキング確認
+2. スコア入力で使うプレイヤーを追加/削除
+3. 利用者ページ (`index.html`) でプレイヤー名・曲名・ボタン数・難易度・スコアを入力
+4. 利用者ページでランキング確認
 
 ## データ保存について
 
 デフォルトではブラウザの `localStorage` に保存されます。
 
-`common.js` の `REMOTE_CONFIG.apiUrl` を設定すると、Google Apps Script経由でGoogle Drive上のJSONを共有データとして利用できます。
+`config.js` の `apiUrl` を設定すると、Google Apps Script経由でGoogle Drive上のJSONを共有データとして利用できます。
 
 - 端末ごとにデータは分かれます
 - 共有API接続時は複数端末で同じデータを参照・更新できます
 - 共有API接続に失敗した場合は自動でローカル保存へフォールバックします
+
+### 曲リストをGoogle Drive JSONから読む
+
+`config.js` の `catalogMode` を `drive-file` にすると、曲リストは共有状態ファイルではなく
+Google Drive 上の `djmax-song-catalog.json` から読み込みます。
+
+- 対象データ: `songs`, `buttons`, `difficulties`
+- `users` は従来どおり共有状態 (`djmax-ranking-data.json`) 側を使います
 
 ## Google Apps Script 設定
 
@@ -43,6 +52,8 @@ GitHub Pages上で動く、シンプルなDJMAXスコアランキングです。
 6. 実行ユーザー: 自分、アクセス: `全員`
 7. 発行されたWebアプリURLを `config.js` の `apiUrl` に設定
 8. `config.js` の `readToken` と `writeToken` を Apps Script 側と一致させる
+9. 曲リストをDrive管理する場合は `config.js` に `catalogMode: "drive-file"` を設定
+10. Apps Script を再デプロイして最新コードを反映
 
 ## フロント設定ファイル
 
@@ -53,7 +64,38 @@ GitHub Pages上で動く、シンプルなDJMAXスコアランキングです。
 ## 共有JSONの配置
 
 - Apps Script 実行アカウントのGoogle Drive直下に `djmax-ranking-data.json` が自動作成されます
+- `catalogMode: "drive-file"` の場合は `djmax-song-catalog.json` も自動作成されます
 - 共有Drive配下で運用したい場合は、Apps Script側で作成先フォルダ指定ロジックを追加してください
+
+## Wikiから曲カタログJSONを生成
+
+`https://w.atwiki.jp/djmaxinfo/pages/169.html#id_12f23f32` の表を元に、
+「曲名 + ボタン別難易度」を持つインポート用JSONを生成できます。
+
+### 1. 対象ページをHTMLとして保存
+
+Cloudflare保護の都合で自動ダウンロードが失敗することがあるため、ブラウザで以下を実施してください。
+
+1. 対象ページを開く
+2. `ページを保存` で `HTMLのみ` または `完全` 形式で保存
+3. 例: `wiki-169.html`
+
+### 2. 生成スクリプトを実行
+
+```bash
+node scripts/generate-catalog-from-wiki.mjs --in ./wiki-169.html --out ./catalog.from-wiki.json
+```
+
+出力JSONは以下の形式です。
+
+- `catalog.songs[].difficultiesByButton` に `4B/5B/6B/8B` ごとの難易度が入る
+- `records` は空配列（管理者ページのJSON読込でそのまま取り込み可能）
+
+### 3. 管理者ページから読み込み
+
+1. `admin.html` にログイン
+2. `JSON読込` から `catalog.from-wiki.json` を選択
+3. 既存データにマージされます
 
 ## GitHub Pages 公開手順
 

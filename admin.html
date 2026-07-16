@@ -35,35 +35,20 @@
 
   <main class="layout admin-layout">
     <section class="panel">
-      <h2>スコア登録</h2>
-      <form id="score-form" class="stack-form">
-        <label>ユーザー名
-          <div class="row-with-action">
-            <select id="input-user" required></select>
-            <button type="button" id="add-user" class="secondary">追加</button>
-          </div>
+      <h2>プレイヤー編集</h2>
+      <form id="player-form" class="stack-form">
+        <label>登録済みプレイヤー
+          <select id="player-select" size="8"></select>
         </label>
 
-        <label>曲名
-          <div class="row-with-action">
-            <select id="input-song" required></select>
-            <button type="button" id="add-song" class="secondary">追加</button>
-          </div>
+        <label>新しいプレイヤー名
+          <input id="new-player-name" type="text" placeholder="例: PLAYER-2" maxlength="32">
         </label>
 
-        <label>ボタン数
-          <select id="input-button" required></select>
-        </label>
-
-        <label>難易度
-          <select id="input-difficulty" required></select>
-        </label>
-
-        <label>スコア
-          <input id="input-score" type="number" min="0" step="1" required placeholder="例: 987654">
-        </label>
-
-        <button type="submit">登録する</button>
+        <div class="tool-buttons">
+          <button type="button" id="add-player">プレイヤー追加</button>
+          <button type="button" id="delete-player" class="danger">選択プレイヤー削除</button>
+        </div>
       </form>
       <p id="form-message" class="muted" aria-live="polite"></p>
     </section>

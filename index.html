@@ -34,6 +34,40 @@
   </header>
 
   <main class="layout">
+    <section class="panel">
+      <h2>スコア入力</h2>
+      <form id="user-score-form" class="stack-form">
+        <label>プレイヤー名
+          <select id="entry-user" required></select>
+        </label>
+
+        <label>曲名フィルタ
+          <input id="song-filter" type="text" placeholder="曲名を入力して絞り込み">
+        </label>
+
+        <label>曲名
+          <select id="entry-song" required></select>
+        </label>
+
+        <div>
+          <p class="picker-label">ボタン数</p>
+          <div id="entry-button-group" class="choice-group"></div>
+        </div>
+
+        <div>
+          <p class="picker-label">難易度</p>
+          <div id="entry-difficulty-group" class="choice-group"></div>
+        </div>
+
+        <label>スコア
+          <input id="entry-score" type="number" min="0" step="1" required placeholder="例: 987654">
+        </label>
+
+        <button type="submit">スコア登録</button>
+      </form>
+      <p id="entry-message" class="muted" aria-live="polite"></p>
+    </section>
+
     <section class="panel filters">
       <h2>絞り込み</h2>
       <div class="filter-grid">

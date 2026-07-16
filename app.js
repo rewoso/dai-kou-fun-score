@@ -24,31 +24,30 @@ function toRankingRows(records) {
   return bestOnly;
 }
 
-function fillFilterOptions(catalog, records) {
-  const users = uniqueSorted([...catalog.users, ...records.map((r) => r.user)]);
-  const songs = uniqueSorted([...catalog.songs, ...records.map((r) => r.song)]);
-  const buttons = uniqueSorted([...catalog.buttons, ...records.map((r) => r.button)]);
-  const difficulties = uniqueSorted([...catalog.difficulties, ...records.map((r) => r.difficulty)]);
+function setSelectOptions(select, values, includeAllLabel = "") {
+  if (!select) {
+    return;
+  }
 
-  const mappings = [
-    ["filter-user", users],
-    ["filter-song", songs],
-    ["filter-button", buttons],
-    ["filter-difficulty", difficulties]
-  ];
+  const current = select.value;
+  select.innerHTML = "";
 
-  for (const [id, options] of mappings) {
-    const select = document.getElementById(id);
-    if (!select) {
-      continue;
-    }
+  if (includeAllLabel) {
+    const allOption = document.createElement("option");
+    allOption.value = "";
+    allOption.textContent = includeAllLabel;
+    select.appendChild(allOption);
+  }
 
-    for (const value of options) {
-      const option = document.createElement("option");
-      option.value = value;
-      option.textContent = value;
-      select.appendChild(option);
-    }
+  for (const value of values) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    select.appendChild(option);
+  }
+
+  if (values.includes(current) || (includeAllLabel && current === "")) {
+    select.value = current;
   }
 }
 
@@ -87,30 +86,63 @@ function renderTable(rows) {
   }
 }
 
-function initFilters(catalog, records) {
-  const filterIds = ["filter-user", "filter-song", "filter-button", "filter-difficulty"];
-  fillFilterOptions(catalog, records);
+function renderChoiceButtons(containerId, values, selected, onSelect, hidden = []) {
+  const container = document.getElementById(containerId);
+  if (!container) {
+    return;
+  }
 
-  const getFilters = () => ({
-    user: document.getElementById("filter-user")?.value || "",
-    song: document.getElementById("filter-song")?.value || "",
-    button: document.getElementById("filter-button")?.value || "",
-    difficulty: document.getElementById("filter-difficulty")?.value || ""
-  });
+  container.innerHTML = "";
+  for (const value of values) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "choice-btn";
+    button.textContent = value;
 
+    if (value === selected) {
+      button.classList.add("is-active");
+    }
+
+    if (hidden.includes(value)) {
+      button.classList.add("is-hidden");
+    }
+
+    button.addEventListener("click", () => onSelect(value));
+    container.appendChild(button);
+  }
+}
+
+function initRanking(catalog, recordsRef) {
   const rerender = () => {
-    const filtered = applyFilters(records, getFilters());
-    const rows = toRankingRows(filtered);
+    const records = recordsRef.get();
+
+    const users = uniqueSorted([...catalog.users, ...records.map((r) => r.user)]);
+    const songs = uniqueSorted([...getSongNames(catalog), ...records.map((r) => r.song)]);
+    const buttons = uniqueSorted([...catalog.buttons, ...records.map((r) => r.button)]);
+    const diffs = uniqueSorted([...catalog.difficulties, ...records.map((r) => r.difficulty)]);
+
+    setSelectOptions(document.getElementById("filter-user"), users, "すべて");
+    setSelectOptions(document.getElementById("filter-song"), songs, "すべて");
+    setSelectOptions(document.getElementById("filter-button"), buttons, "すべて");
+    setSelectOptions(document.getElementById("filter-difficulty"), diffs, "すべて");
+
+    const filters = {
+      user: document.getElementById("filter-user")?.value || "",
+      song: document.getElementById("filter-song")?.value || "",
+      button: document.getElementById("filter-button")?.value || "",
+      difficulty: document.getElementById("filter-difficulty")?.value || ""
+    };
+
+    const rows = toRankingRows(applyFilters(records, filters));
     renderTable(rows);
   };
 
-  for (const id of filterIds) {
-    const select = document.getElementById(id);
-    select?.addEventListener("change", rerender);
+  for (const id of ["filter-user", "filter-song", "filter-button", "filter-difficulty"]) {
+    document.getElementById(id)?.addEventListener("change", rerender);
   }
 
   document.getElementById("clear-filters")?.addEventListener("click", () => {
-    for (const id of filterIds) {
+    for (const id of ["filter-user", "filter-song", "filter-button", "filter-difficulty"]) {
       const select = document.getElementById(id);
       if (select) {
         select.value = "";
@@ -120,6 +152,120 @@ function initFilters(catalog, records) {
   });
 
   rerender();
+  return rerender;
+}
+
+function initScoreEntry(catalog, recordsRef, rerenderRanking) {
+  const entryUser = document.getElementById("entry-user");
+  const songFilter = document.getElementById("song-filter");
+  const entrySong = document.getElementById("entry-song");
+  const scoreInput = document.getElementById("entry-score");
+  const form = document.getElementById("user-score-form");
+  const message = document.getElementById("entry-message");
+
+  if (!entryUser || !songFilter || !entrySong || !scoreInput || !form || !message) {
+    return;
+  }
+
+  setSelectOptions(entryUser, uniqueSorted(catalog.users));
+
+  const state = {
+    button: catalog.buttons[0] || "",
+    difficulty: catalog.difficulties[0] || ""
+  };
+
+  const refreshDifficultyButtons = () => {
+    const selectedSong = entrySong.value;
+    const available = getDifficultiesForSong(catalog, selectedSong, state.button);
+
+    if (!available.includes(state.difficulty)) {
+      state.difficulty = available[0] || "";
+    }
+
+    const hidden = catalog.difficulties.filter((d) => !available.includes(d));
+    renderChoiceButtons("entry-difficulty-group", catalog.difficulties, state.difficulty, (value) => {
+      if (!available.includes(value)) {
+        return;
+      }
+      state.difficulty = value;
+      refreshDifficultyButtons();
+    }, hidden);
+  };
+
+  const refreshSongs = () => {
+    const query = songFilter.value.trim().toLowerCase();
+    const allSongs = getSongNames(catalog);
+    const filtered = allSongs.filter((song) => song.toLowerCase().includes(query));
+
+    const previous = entrySong.value;
+    setSelectOptions(entrySong, filtered);
+
+    if (filtered.length === 0) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "一致する曲がありません";
+      entrySong.innerHTML = "";
+      entrySong.appendChild(option);
+      entrySong.value = "";
+    } else if (filtered.includes(previous)) {
+      entrySong.value = previous;
+    } else {
+      entrySong.value = filtered[0];
+    }
+
+    refreshDifficultyButtons();
+  };
+
+  const rerenderButtons = () => {
+    renderChoiceButtons("entry-button-group", catalog.buttons, state.button, (value) => {
+      state.button = value;
+      rerenderButtons();
+      refreshDifficultyButtons();
+    });
+  };
+  rerenderButtons();
+
+  refreshSongs();
+
+  songFilter.addEventListener("input", refreshSongs);
+  entrySong.addEventListener("change", refreshDifficultyButtons);
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const user = entryUser.value;
+    const song = entrySong.value;
+    const button = state.button;
+    const difficulty = state.difficulty;
+    const score = Number(scoreInput.value || 0);
+
+    if (!user || !song || !button || !difficulty || score < 0) {
+      message.textContent = "入力内容を確認してください。";
+      return;
+    }
+
+    const payload = {
+      id: crypto.randomUUID(),
+      user,
+      song,
+      button,
+      difficulty,
+      score,
+      createdAt: new Date().toISOString()
+    };
+
+    const nextRecords = [...recordsRef.get(), payload];
+    recordsRef.set(nextRecords);
+
+    const saveResult = await saveSharedState(catalog, nextRecords);
+    message.textContent = saveResult.ok
+      ? `${user} / ${song} のスコアを登録しました。`
+      : `ローカル保存のみ成功。共有反映失敗: ${saveResult.error}`;
+
+    scoreInput.value = "";
+    scoreInput.focus();
+    rerenderRanking();
+  });
 }
 
 async function main() {
@@ -127,14 +273,29 @@ async function main() {
 
   const shared = await loadSharedState();
   const catalog = shared.catalog;
-  const records = shared.records;
+  let records = shared.records;
+
+  const recordsRef = {
+    get: () => records,
+    set: (next) => {
+      records = next;
+    }
+  };
 
   const count = document.getElementById("record-count");
-  if (count && shared.source === "local-fallback") {
-    count.textContent = "ローカル表示 (共有API接続失敗)";
+  const message = document.getElementById("entry-message");
+
+  if (shared.source === "local-fallback") {
+    if (count) {
+      count.textContent = "ローカル表示 (共有API接続失敗)";
+    }
+    if (message) {
+      message.textContent = "共有API接続失敗のためローカル保存モードです。";
+    }
   }
 
-  initFilters(catalog, records);
+  const rerenderRanking = initRanking(catalog, recordsRef);
+  initScoreEntry(catalog, recordsRef, rerenderRanking);
 }
 
 main();

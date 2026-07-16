@@ -1,40 +1,16 @@
-function populateSelect(selectId, values) {
-  const select = document.getElementById(selectId);
+function populatePlayers(catalog) {
+  const select = document.getElementById("player-select");
   if (!select) {
     return;
   }
 
   select.innerHTML = "";
-  for (const value of values) {
+  for (const user of uniqueSorted(catalog.users)) {
     const option = document.createElement("option");
-    option.value = value;
-    option.textContent = value;
+    option.value = user;
+    option.textContent = user;
     select.appendChild(option);
   }
-}
-
-function refreshAdminCatalog(catalog) {
-  populateSelect("input-user", uniqueSorted(catalog.users));
-  populateSelect("input-song", uniqueSorted(catalog.songs));
-  populateSelect("input-button", uniqueSorted(catalog.buttons));
-  populateSelect("input-difficulty", uniqueSorted(catalog.difficulties));
-}
-
-function askAndAdd(catalog, key, label) {
-  const name = window.prompt(`${label}を追加してください`);
-  if (!name) {
-    return null;
-  }
-
-  const trimmed = name.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  return {
-    ...catalog,
-    [key]: uniqueSorted([...(catalog[key] || []), trimmed])
-  };
 }
 
 function downloadJson(filename, data) {
@@ -57,12 +33,13 @@ function mergeImported(currentCatalog, currentRecords, payload) {
   const incomingCatalog = normalizeCatalog(payload.catalog);
   const incomingRecords = Array.isArray(payload.records) ? payload.records : [];
 
-  const mergedCatalog = {
+  const mergedCatalog = normalizeCatalog({
+    ...currentCatalog,
     users: uniqueSorted([...currentCatalog.users, ...incomingCatalog.users]),
-    songs: uniqueSorted([...currentCatalog.songs, ...incomingCatalog.songs]),
-    buttons: uniqueSorted([...currentCatalog.buttons, ...incomingCatalog.buttons]),
-    difficulties: uniqueSorted([...currentCatalog.difficulties, ...incomingCatalog.difficulties])
-  };
+    songs: [...currentCatalog.songs, ...incomingCatalog.songs],
+    buttons: uniqueSorted([...(currentCatalog.buttons || []), ...(incomingCatalog.buttons || [])]),
+    difficulties: uniqueSorted([...(currentCatalog.difficulties || []), ...(incomingCatalog.difficulties || [])])
+  });
 
   const mergedRecordsMap = new Map();
   for (const record of [...currentRecords, ...incomingRecords]) {
@@ -92,72 +69,83 @@ async function main() {
   const initial = await loadSharedState();
   let catalog = initial.catalog;
   let records = initial.records;
-  refreshAdminCatalog(catalog);
+  populatePlayers(catalog);
 
   const message = document.getElementById("form-message");
-  const scoreForm = document.getElementById("score-form");
 
   if (message && initial.source === "local-fallback") {
     message.textContent = "共有API接続失敗のためローカルデータを表示中です。";
   }
 
-  scoreForm?.addEventListener("submit", async (event) => {
-    event.preventDefault();
+  document.getElementById("add-player")?.addEventListener("click", async () => {
+    const input = document.getElementById("new-player-name");
+    const playerName = input?.value?.trim();
 
-    const payload = {
-      id: crypto.randomUUID(),
-      user: document.getElementById("input-user")?.value,
-      song: document.getElementById("input-song")?.value,
-      button: document.getElementById("input-button")?.value,
-      difficulty: document.getElementById("input-difficulty")?.value,
-      score: Number(document.getElementById("input-score")?.value || 0),
-      createdAt: new Date().toISOString()
+    if (!playerName) {
+      if (message) {
+        message.textContent = "プレイヤー名を入力してください。";
+      }
+      return;
+    }
+
+    if (catalog.users.includes(playerName)) {
+      if (message) {
+        message.textContent = "同名のプレイヤーが既に存在します。";
+      }
+      return;
+    }
+
+    catalog = {
+      ...catalog,
+      users: uniqueSorted([...catalog.users, playerName])
     };
 
-    records.push(payload);
-
     const saveResult = await saveSharedState(catalog, records);
+    populatePlayers(catalog);
+
+    if (input) {
+      input.value = "";
+    }
 
     if (message) {
-      if (saveResult.ok) {
-        message.textContent = `${payload.user} / ${payload.song} のスコアを登録しました。`;
-      } else {
-        message.textContent = `ローカル保存のみ成功。共有反映失敗: ${saveResult.error}`;
+      message.textContent = saveResult.ok
+        ? `${playerName} を追加しました。`
+        : `ローカル保存のみ成功。共有反映失敗: ${saveResult.error}`;
+    }
+  });
+
+  document.getElementById("delete-player")?.addEventListener("click", async () => {
+    const select = document.getElementById("player-select");
+    const selected = select?.value;
+
+    if (!selected) {
+      if (message) {
+        message.textContent = "削除するプレイヤーを選択してください。";
       }
-    }
-
-    const scoreInput = document.getElementById("input-score");
-    if (scoreInput) {
-      scoreInput.value = "";
-      scoreInput.focus();
-    }
-  });
-
-  document.getElementById("add-user")?.addEventListener("click", async () => {
-    const next = askAndAdd(catalog, "users", "ユーザー名");
-    if (!next) {
       return;
     }
 
-    catalog = next;
-    refreshAdminCatalog(catalog);
-    const saveResult = await saveSharedState(catalog, records);
-    if (message) {
-      message.textContent = saveResult.ok ? "ユーザー名を追加しました。" : `ローカル保存のみ成功。共有反映失敗: ${saveResult.error}`;
-    }
-  });
-
-  document.getElementById("add-song")?.addEventListener("click", async () => {
-    const next = askAndAdd(catalog, "songs", "曲名");
-    if (!next) {
-      return;
+    const inUse = records.some((record) => record.user === selected);
+    if (inUse) {
+      const confirmed = window.confirm("このプレイヤーのスコアが存在します。プレイヤーと関連スコアを削除しますか？");
+      if (!confirmed) {
+        return;
+      }
+      records = records.filter((record) => record.user !== selected);
     }
 
-    catalog = next;
-    refreshAdminCatalog(catalog);
+    catalog = {
+      ...catalog,
+      users: catalog.users.filter((user) => user !== selected)
+    };
+
     const saveResult = await saveSharedState(catalog, records);
+    populatePlayers(catalog);
+
     if (message) {
-      message.textContent = saveResult.ok ? "曲名を追加しました。" : `ローカル保存のみ成功。共有反映失敗: ${saveResult.error}`;
+      message.textContent = saveResult.ok
+        ? `${selected} を削除しました。`
+        : `ローカル保存のみ成功。共有反映失敗: ${saveResult.error}`;
     }
   });
 
@@ -179,7 +167,7 @@ async function main() {
       records = merged.records;
 
       const saveResult = await saveSharedState(catalog, records);
-      refreshAdminCatalog(catalog);
+      populatePlayers(catalog);
 
       if (message) {
         message.textContent = saveResult.ok ? "JSONを読み込みました。" : `ローカル保存のみ成功。共有反映失敗: ${saveResult.error}`;

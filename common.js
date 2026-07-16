@@ -5,7 +5,38 @@ const STORAGE_KEYS = {
 
 const DEFAULT_CATALOG = {
   users: ["PLAYER-1"],
-  songs: ["glory day"],
+  songs: [
+    {
+      name: "glory day",
+      difficulties: ["NORMAL", "HARD", "MAXIMUM"],
+      difficultiesByButton: {
+        "4B": ["NORMAL", "HARD", "MAXIMUM"],
+        "5B": ["NORMAL", "HARD", "MAXIMUM"],
+        "6B": ["NORMAL", "HARD", "MAXIMUM"],
+        "8B": ["NORMAL", "HARD", "MAXIMUM"]
+      }
+    },
+    {
+      name: "OBLIVION",
+      difficulties: ["NORMAL", "HARD", "MAXIMUM", "SC"],
+      difficultiesByButton: {
+        "4B": ["NORMAL", "HARD", "MAXIMUM", "SC"],
+        "5B": ["NORMAL", "HARD", "MAXIMUM", "SC"],
+        "6B": ["NORMAL", "HARD", "MAXIMUM", "SC"],
+        "8B": ["NORMAL", "HARD", "MAXIMUM", "SC"]
+      }
+    },
+    {
+      name: "Ask to Wind",
+      difficulties: ["NORMAL", "HARD"],
+      difficultiesByButton: {
+        "4B": ["NORMAL", "HARD"],
+        "5B": ["NORMAL", "HARD"],
+        "6B": ["NORMAL", "HARD"],
+        "8B": ["NORMAL", "HARD"]
+      }
+    }
+  ],
   buttons: ["4B", "5B", "6B", "8B"],
   difficulties: ["NORMAL", "HARD", "MAXIMUM", "SC"]
 };
@@ -20,6 +51,8 @@ const REMOTE_CONFIG = {
   apiUrl: "",
   readToken: "djmax-read-token",
   writeToken: "djmax-write-token",
+  // "state": use catalog from shared state file, "drive-file": use separate song catalog JSON.
+  catalogMode: "drive-file",
   timeoutMs: 10000
 };
 
@@ -34,9 +67,38 @@ if (window.DJMAX_REMOTE_CONFIG && typeof window.DJMAX_REMOTE_CONFIG === "object"
   if (typeof override.writeToken === "string") {
     REMOTE_CONFIG.writeToken = override.writeToken;
   }
+  if (override.catalogMode === "state" || override.catalogMode === "drive-file") {
+    REMOTE_CONFIG.catalogMode = override.catalogMode;
+  }
   if (Number.isFinite(override.timeoutMs) && override.timeoutMs > 0) {
     REMOTE_CONFIG.timeoutMs = Number(override.timeoutMs);
   }
+}
+
+function pickSongCatalog(catalog) {
+  const normalized = normalizeCatalog(catalog);
+  return {
+    songs: normalized.songs,
+    buttons: normalized.buttons,
+    difficulties: normalized.difficulties
+  };
+}
+
+function mergeCatalogWithSongCatalog(baseCatalog, songCatalog) {
+  const base = normalizeCatalog(baseCatalog);
+  const songsOnly = songCatalog && typeof songCatalog === "object"
+    ? {
+      songs: songCatalog.songs,
+      buttons: songCatalog.buttons,
+      difficulties: songCatalog.difficulties
+    }
+    : {};
+
+  return normalizeCatalog({
+    ...base,
+    ...songsOnly,
+    users: base.users
+  });
 }
 
 async function sha256Hex(text) {
@@ -47,12 +109,143 @@ async function sha256Hex(text) {
 
 function normalizeCatalog(catalog) {
   const source = catalog && typeof catalog === "object" ? catalog : {};
+  const buttons = Array.isArray(source.buttons) && source.buttons.length > 0
+    ? uniqueSorted(source.buttons)
+    : [...DEFAULT_CATALOG.buttons];
+
+  const difficulties = Array.isArray(source.difficulties) && source.difficulties.length > 0
+    ? uniqueSorted(source.difficulties)
+    : [...DEFAULT_CATALOG.difficulties];
+
+  const rawSongs = Array.isArray(source.songs) && source.songs.length > 0
+    ? source.songs
+    : [...DEFAULT_CATALOG.songs];
+
+  const songs = rawSongs
+    .map((song) => {
+      if (typeof song === "string") {
+        const difficultiesByButton = Object.fromEntries(
+          buttons.map((button) => [button, [...difficulties]])
+        );
+
+        return {
+          name: song,
+          difficulties: [...difficulties],
+          difficultiesByButton
+        };
+      }
+
+      if (song && typeof song === "object" && song.name) {
+        const diffs = Array.isArray(song.difficulties) && song.difficulties.length > 0
+          ? uniqueSorted(song.difficulties)
+          : [...difficulties];
+
+        const incomingByButton = song.difficultiesByButton && typeof song.difficultiesByButton === "object"
+          ? song.difficultiesByButton
+          : {};
+
+        const normalizedByButton = Object.fromEntries(
+          buttons.map((button) => {
+            const buttonDiffs = Array.isArray(incomingByButton[button]) && incomingByButton[button].length > 0
+              ? uniqueSorted(incomingByButton[button])
+              : [...diffs];
+            return [button, buttonDiffs];
+          })
+        );
+
+        const mergedDiffs = uniqueSorted(
+          buttons.flatMap((button) => normalizedByButton[button] || [])
+        );
+
+        return {
+          name: String(song.name),
+          difficulties: mergedDiffs.length > 0 ? mergedDiffs : diffs,
+          difficultiesByButton: normalizedByButton
+        };
+      }
+
+      return null;
+    })
+    .filter((song) => song && song.name);
+
+  const uniqueSongsMap = new Map();
+  for (const song of songs) {
+    const existing = uniqueSongsMap.get(song.name);
+    if (!existing) {
+      uniqueSongsMap.set(song.name, song);
+      continue;
+    }
+
+    uniqueSongsMap.set(song.name, {
+      name: song.name,
+      difficulties: uniqueSorted([...(existing.difficulties || []), ...(song.difficulties || [])]),
+      difficultiesByButton: Object.fromEntries(
+        buttons.map((button) => [
+          button,
+          uniqueSorted([
+            ...((existing.difficultiesByButton && existing.difficultiesByButton[button]) || []),
+            ...((song.difficultiesByButton && song.difficultiesByButton[button]) || [])
+          ])
+        ])
+      )
+    });
+  }
+
+  const normalizedSongs = [...uniqueSongsMap.values()].map((song) => {
+    const byButton = song.difficultiesByButton && typeof song.difficultiesByButton === "object"
+      ? song.difficultiesByButton
+      : {};
+
+    const normalizedByButton = Object.fromEntries(
+      buttons.map((button) => {
+        const buttonDiffs = Array.isArray(byButton[button]) && byButton[button].length > 0
+          ? uniqueSorted(byButton[button])
+          : uniqueSorted(song.difficulties || difficulties);
+        return [button, buttonDiffs];
+      })
+    );
+
+    const mergedDiffs = uniqueSorted(buttons.flatMap((button) => normalizedByButton[button] || []));
+
+    return {
+      name: song.name,
+      difficulties: mergedDiffs.length > 0 ? mergedDiffs : [...difficulties],
+      difficultiesByButton: normalizedByButton
+    };
+  });
+
   return {
     users: Array.isArray(source.users) && source.users.length > 0 ? source.users : [...DEFAULT_CATALOG.users],
-    songs: Array.isArray(source.songs) && source.songs.length > 0 ? source.songs : [...DEFAULT_CATALOG.songs],
-    buttons: Array.isArray(source.buttons) && source.buttons.length > 0 ? source.buttons : [...DEFAULT_CATALOG.buttons],
-    difficulties: Array.isArray(source.difficulties) && source.difficulties.length > 0 ? source.difficulties : [...DEFAULT_CATALOG.difficulties]
+    songs: normalizedSongs,
+    buttons,
+    difficulties
   };
+}
+
+function getSongNames(catalog) {
+  return uniqueSorted((catalog.songs || []).map((song) => song.name));
+}
+
+function getDifficultiesForSong(catalog, songName, button) {
+  const matched = (catalog.songs || []).find((song) => song.name === songName);
+
+  if (!matched) {
+    return [...catalog.difficulties];
+  }
+
+  if (!button) {
+    return [...matched.difficulties];
+  }
+
+  const byButton = matched.difficultiesByButton && typeof matched.difficultiesByButton === "object"
+    ? matched.difficultiesByButton
+    : null;
+
+  if (byButton && Array.isArray(byButton[button]) && byButton[button].length > 0) {
+    return [...byButton[button]];
+  }
+
+  return [...matched.difficulties];
 }
 
 function loadCatalog() {
@@ -126,7 +319,8 @@ async function remoteFetchJson(payload) {
     const response = await fetch(REMOTE_CONFIG.apiUrl, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        // Use a simple request to reduce CORS preflight issues on Apps Script.
+        "Content-Type": "text/plain;charset=utf-8"
       },
       body: JSON.stringify(payload),
       signal: controller.signal
@@ -160,6 +354,20 @@ async function loadSharedState() {
     }
 
     const state = normalizeState(result.state);
+
+    if (REMOTE_CONFIG.catalogMode === "drive-file") {
+      const catalogResult = await remoteFetchJson({
+        action: "getSongCatalog",
+        token: REMOTE_CONFIG.readToken
+      });
+
+      if (!catalogResult || catalogResult.ok !== true) {
+        throw new Error(catalogResult?.error || "remote song catalog fetch failed");
+      }
+
+      state.catalog = mergeCatalogWithSongCatalog(state.catalog, catalogResult.catalog);
+    }
+
     saveCatalog(state.catalog);
     saveRecords(state.records);
     return { ...state, source: "remote" };
@@ -186,6 +394,14 @@ async function saveSharedState(catalog, records) {
 
     if (!result || result.ok !== true) {
       throw new Error(result?.error || "remote save failed");
+    }
+
+    if (REMOTE_CONFIG.catalogMode === "drive-file") {
+      await remoteFetchJson({
+        action: "setSongCatalog",
+        token: REMOTE_CONFIG.writeToken,
+        catalog: pickSongCatalog(next.catalog)
+      });
     }
 
     return { ok: true, source: "remote" };
