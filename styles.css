@@ -241,6 +241,32 @@ th {
   font-size: 0.92rem;
 }
 
+.ranking-song-trigger {
+  width: auto;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #9de6ff;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.ranking-song-trigger:hover {
+  color: #c7f4ff;
+  transform: none;
+}
+
+.ranking-song-trigger:focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 2px;
+}
+
 .difficulty-pill {
   display: inline-flex;
   align-items: center;

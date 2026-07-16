@@ -70,7 +70,7 @@ function setSelectOptions(select, values, includeAllLabel = "") {
   }
 }
 
-function renderTable(rows) {
+function renderTable(rows, onSongClick) {
   const body = document.getElementById("ranking-body");
   const empty = document.getElementById("empty-state");
   const count = document.getElementById("record-count");
@@ -98,13 +98,35 @@ function renderTable(rows) {
     tr.innerHTML = `
       <td>${index + 1}</td>
       <td>${row.user}</td>
-      <td>${row.song}</td>
+      <td></td>
       <td><span class="button-pill ${getButtonDisplayClass(row.button)}">${row.button}</span></td>
       <td><span class="difficulty-pill ${getDifficultyDisplayClass(row.difficulty)}">${row.difficulty}</span></td>
       <td>${score.toLocaleString("ja-JP")}</td>
       <td><span class="rank-pill ${rankClasses}">${scoreRank}</span></td>
       <td>${formatDate(row.createdAt)}</td>
     `;
+
+    const songCell = tr.children[2];
+    if (songCell) {
+      if (typeof onSongClick === "function") {
+        const songButton = document.createElement("button");
+        songButton.type = "button";
+        songButton.className = "ranking-song-trigger";
+        songButton.textContent = row.song;
+        songButton.title = "クリックでこの譜面条件を絞り込み";
+        songButton.addEventListener("click", () => {
+          onSongClick({
+            song: row.song,
+            button: row.button,
+            difficulty: row.difficulty
+          });
+        });
+        songCell.appendChild(songButton);
+      } else {
+        songCell.textContent = row.song;
+      }
+    }
+
     body.appendChild(tr);
   }
 }
@@ -233,7 +255,19 @@ function initRanking(catalog, recordsRef) {
   const userMultiToggle = document.getElementById("filter-user-multi");
   const userExtraList = document.getElementById("filter-user-extra-list");
   const userAddButton = document.getElementById("filter-user-add");
+  const songSelect = document.getElementById("filter-song");
+  const buttonSelect = document.getElementById("filter-button");
+  const difficultySelect = document.getElementById("filter-difficulty");
   let latestUsers = [];
+
+  const setSelectValueIfExists = (select, value) => {
+    if (!select) {
+      return;
+    }
+
+    const hasValue = Array.from(select.options).some((option) => option.value === value);
+    select.value = hasValue ? value : "";
+  };
 
   const getExtraUserSelects = () => {
     if (!userExtraList) {
@@ -345,26 +379,31 @@ function initRanking(catalog, recordsRef) {
       setSelectOptions(extraSelect, latestUsers, "すべて");
     }
     updateUserAddButtonState();
-    setSelectOptions(document.getElementById("filter-song"), songs, "すべて");
-    setSelectOptions(document.getElementById("filter-button"), buttons, "すべて");
-    setSelectOptions(document.getElementById("filter-difficulty"), diffs, "すべて");
+    setSelectOptions(songSelect, songs, "すべて");
+    setSelectOptions(buttonSelect, buttons, "すべて");
+    setSelectOptions(difficultySelect, diffs, "すべて");
 
     const isUserMulti = Boolean(userMultiToggle?.checked);
 
     const filters = {
       users: isUserMulti ? getSelectedUsersFromDropdowns() : [],
       user: !isUserMulti ? (userSelect?.value || "") : "",
-      song: document.getElementById("filter-song")?.value || "",
+      song: songSelect?.value || "",
       songQuery: document.getElementById("filter-song-query")?.value || "",
-      button: document.getElementById("filter-button")?.value || "",
-      difficulty: document.getElementById("filter-difficulty")?.value || "",
+      button: buttonSelect?.value || "",
+      difficulty: difficultySelect?.value || "",
       recentLimit: document.getElementById("filter-recent-limit")?.value || ""
     };
 
     const filtered = applyFilters(records, filters);
     const recentOnly = applyRecentUpdateLimit(filtered, filters.recentLimit);
     const rows = toRankingRows(recentOnly);
-    renderTable(rows);
+    renderTable(rows, (chart) => {
+      setSelectValueIfExists(songSelect, chart.song);
+      setSelectValueIfExists(buttonSelect, chart.button);
+      setSelectValueIfExists(difficultySelect, chart.difficulty);
+      rerender();
+    });
   };
 
   for (const id of ["filter-user", "filter-song", "filter-song-query", "filter-button", "filter-difficulty", "filter-recent-limit"]) {
