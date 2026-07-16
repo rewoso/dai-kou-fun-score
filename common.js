@@ -313,6 +313,25 @@ function isRemoteEnabled() {
   return Boolean(REMOTE_CONFIG.apiUrl && REMOTE_CONFIG.apiUrl.trim());
 }
 
+function showLoading(message = "通信中...") {
+  const overlay = document.getElementById("loading-overlay");
+  if (!overlay) {
+    return;
+  }
+  const label = overlay.querySelector(".loading-label");
+  if (label) {
+    label.textContent = message;
+  }
+  overlay.style.display = "grid";
+}
+
+function hideLoading() {
+  const overlay = document.getElementById("loading-overlay");
+  if (overlay) {
+    overlay.style.display = "none";
+  }
+}
+
 async function remoteFetchJson(payload) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REMOTE_CONFIG.timeoutMs);

@@ -459,7 +459,13 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
     const nextRecords = [...recordsRef.get(), payload];
     recordsRef.set(nextRecords);
 
-    const saveResult = await saveSharedState(catalog, nextRecords);
+    if (isRemoteEnabled()) showLoading("保存中...");
+    let saveResult;
+    try {
+      saveResult = await saveSharedState(catalog, nextRecords);
+    } finally {
+      hideLoading();
+    }
     message.textContent = saveResult.ok
       ? `${user} / ${song} のスコアを登録しました。`
       : `ローカル保存のみ成功。共有反映失敗: ${saveResult.error}`;
@@ -473,7 +479,13 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
 async function main() {
   await initPasswordGate();
 
-  const shared = await loadSharedState();
+  if (isRemoteEnabled()) showLoading("データを読み込み中...");
+  let shared;
+  try {
+    shared = await loadSharedState();
+  } finally {
+    hideLoading();
+  }
   const catalog = shared.catalog;
   let records = shared.records;
 

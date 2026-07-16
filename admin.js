@@ -66,7 +66,13 @@ function mergeImported(currentCatalog, currentRecords, payload) {
 async function main() {
   await initPasswordGate();
 
-  const initial = await loadSharedState();
+  if (isRemoteEnabled()) showLoading("データを読み込み中...");
+  let initial;
+  try {
+    initial = await loadSharedState();
+  } finally {
+    hideLoading();
+  }
   let catalog = initial.catalog;
   let records = initial.records;
   populatePlayers(catalog);
@@ -100,7 +106,13 @@ async function main() {
       users: uniqueSorted([...catalog.users, playerName])
     };
 
-    const saveResult = await saveSharedState(catalog, records);
+    if (isRemoteEnabled()) showLoading("保存中...");
+    let saveResult;
+    try {
+      saveResult = await saveSharedState(catalog, records);
+    } finally {
+      hideLoading();
+    }
     populatePlayers(catalog);
 
     if (input) {
@@ -139,7 +151,13 @@ async function main() {
       users: catalog.users.filter((user) => user !== selected)
     };
 
-    const saveResult = await saveSharedState(catalog, records);
+    if (isRemoteEnabled()) showLoading("保存中...");
+    let saveResult;
+    try {
+      saveResult = await saveSharedState(catalog, records);
+    } finally {
+      hideLoading();
+    }
     populatePlayers(catalog);
 
     if (message) {
@@ -166,7 +184,13 @@ async function main() {
       catalog = merged.catalog;
       records = merged.records;
 
-      const saveResult = await saveSharedState(catalog, records);
+      if (isRemoteEnabled()) showLoading("保存中...");
+      let saveResult;
+      try {
+        saveResult = await saveSharedState(catalog, records);
+      } finally {
+        hideLoading();
+      }
       populatePlayers(catalog);
 
       if (message) {
@@ -188,10 +212,16 @@ async function main() {
     }
 
     records = [];
-    const saveResult = await saveSharedState(catalog, records);
+    if (isRemoteEnabled()) showLoading("保存中...");
+    let saveResult;
+    try {
+      saveResult = await saveSharedState(catalog, records);
+    } finally {
+      hideLoading();
+    }
 
     if (message) {
-      message.textContent = saveResult.ok ? "全スコアを削除しました。" : `ローカル保存のみ成功。共有反映失敗: ${saveResult.error}`;
+      message.textContent = saveResult.ok ? "全スコアを削除しました。"
     }
   });
 }
