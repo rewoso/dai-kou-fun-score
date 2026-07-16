@@ -218,6 +218,12 @@ button.danger {
   white-space: nowrap;
 }
 
+.ranking-note {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .table-wrap {
   overflow-x: auto;
   margin-top: 0.8rem;
