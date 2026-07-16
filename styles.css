@@ -309,6 +309,58 @@ th {
   border-color: #ec407a;
 }
 
+.rank-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.rank-pill.rank-s {
+  background: #8a6b00;
+  color: #fff9e6;
+  border-color: #ffd54f;
+}
+
+.rank-pill.rank-perfect {
+  animation: rankSGlow 1.6s ease-in-out infinite;
+}
+
+.rank-pill.rank-a {
+  background: #1b5e20;
+  color: #eefff0;
+  border-color: #66bb6a;
+}
+
+.rank-pill.rank-b {
+  background: #0d47a1;
+  color: #eef5ff;
+  border-color: #64b5f6;
+}
+
+.rank-pill.rank-c {
+  background: #37474f;
+  color: #ecf3f6;
+  border-color: #78909c;
+}
+
+@keyframes rankSGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(255, 213, 79, 0);
+    transform: translateZ(0);
+  }
+  50% {
+    box-shadow: 0 0 14px rgba(255, 213, 79, 0.75), 0 0 28px rgba(255, 193, 7, 0.5);
+    transform: translateZ(0);
+  }
+}
+
 tbody tr {
   animation: fadeIn 220ms ease;
 }

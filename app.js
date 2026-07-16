@@ -92,17 +92,59 @@ function renderTable(rows) {
 
   for (const [index, row] of rows.entries()) {
     const tr = document.createElement("tr");
+    const score = Number(row.score) || 0;
+    const scoreRank = getScoreRank(score);
+    const rankClasses = getScoreRankClasses(scoreRank, score);
     tr.innerHTML = `
       <td>${index + 1}</td>
       <td>${row.user}</td>
       <td>${row.song}</td>
       <td><span class="button-pill ${getButtonDisplayClass(row.button)}">${row.button}</span></td>
       <td><span class="difficulty-pill ${getDifficultyDisplayClass(row.difficulty)}">${row.difficulty}</span></td>
-      <td>${Number(row.score).toLocaleString("ja-JP")}</td>
+      <td>${score.toLocaleString("ja-JP")}</td>
+      <td><span class="rank-pill ${rankClasses}">${scoreRank}</span></td>
       <td>${formatDate(row.createdAt)}</td>
     `;
     body.appendChild(tr);
   }
+}
+
+function getScoreRank(score) {
+  const normalizedScore = Number(score) || 0;
+
+  if (normalizedScore >= 970000) {
+    return "S";
+  }
+  if (normalizedScore >= 900000) {
+    return "A";
+  }
+  if (normalizedScore >= 800000) {
+    return "B";
+  }
+  return "C";
+}
+
+function getScoreRankClass(rank) {
+  switch (rank) {
+    case "S":
+      return "rank-s";
+    case "A":
+      return "rank-a";
+    case "B":
+      return "rank-b";
+    default:
+      return "rank-c";
+  }
+}
+
+function getScoreRankClasses(rank, score) {
+  const classNames = [getScoreRankClass(rank)];
+
+  if (score === 1000000) {
+    classNames.push("rank-perfect");
+  }
+
+  return classNames.join(" ");
 }
 
 function getDifficultyDisplayClass(value) {
