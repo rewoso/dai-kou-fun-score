@@ -12,7 +12,7 @@ GitHub Pages上で動く、シンプルなDJMAXスコアランキングです。
 
 ## 初期パスワード
 
-- 利用者用: `djmax-user`
+- 利用者用: `123455`
 - 管理者用: `djmax-admin`
 
 `common.js` の `PASSWORD_HASHES` を変更すれば差し替えできます。

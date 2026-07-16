@@ -11,7 +11,7 @@ const DEFAULT_CATALOG = {
 };
 
 const PASSWORD_HASHES = {
-  user: "08db71e696ce9e2d944639445ecbf0dd9930d9e3d8b8f1cea83d99fcde49fedd",
+  user: "fc1f09ab08ebdd072ea6da53a5691abcc18c9163b1be1f0921a5adb50e3f5077",
   admin: "9ff93f7009c823d174bed269b6ff4aefebe702e73f114348cefeb28d05120e08"
 };
 
