@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title>DJMAX 大興奮</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#08232c"/>
+      <stop offset="100%" stop-color="#061114"/>
+    </linearGradient>
+    <linearGradient id="mainText" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fffde7"/>
+      <stop offset="26%" stop-color="#fff16a"/>
+      <stop offset="52%" stop-color="#ffe14a"/>
+      <stop offset="74%" stop-color="#ffd23a"/>
+      <stop offset="100%" stop-color="#ffc107"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <circle cx="390" cy="98" r="88" fill="#2bc5ff" opacity="0.17"/>
+  <circle cx="88" cy="430" r="95" fill="#29d3a4" opacity="0.14"/>
+
+  <g fill="#faff7e" opacity="0.95" filter="url(#glow)">
+    <path d="M92 122l16 34 34 16-34 16-16 34-16-34-34-16 34-16z"/>
+    <path d="M404 96l10 22 22 10-22 10-10 22-10-22-22-10 22-10z"/>
+    <path d="M418 346l12 26 26 12-26 12-12 26-12-26-26-12 26-12z"/>
+    <path d="M132 372l8 18 18 8-18 8-8 18-8-18-18-8 18-8z"/>
+  </g>
+
+  <text x="256" y="230" text-anchor="middle" fill="#ebf7ff" font-size="58" font-weight="700" font-family="'Zen Kaku Gothic New', sans-serif" letter-spacing="6">DJMAX</text>
+  <text x="256" y="332" text-anchor="middle" fill="url(#mainText)" font-size="120" font-weight="700" font-family="'Zen Kaku Gothic New', sans-serif" filter="url(#glow)">大興奮</text>
+</svg>
