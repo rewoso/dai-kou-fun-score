@@ -1,4 +1,4 @@
-const CACHE_VERSION = "djmax-pwa-v1";
+const CACHE_VERSION = "djmax-pwa-v2";
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 
 const CORE_ASSETS = [
