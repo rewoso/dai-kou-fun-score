@@ -1,6 +1,7 @@
 const STORAGE_KEYS = {
   records: "djmax_records_v1",
-  catalog: "djmax_catalog_v1"
+  catalog: "djmax_catalog_v1",
+  ocrLayout: "djmax_ocr_layout_v1"
 };
 
 const DEFAULT_CATALOG = {
@@ -47,6 +48,25 @@ const PASSWORD_HASHES = {
 };
 
 const DIFFICULTY_ORDER = ["NORMAL", "HARD", "MAXIMUM", "SC"];
+
+const OCR_REGION_KEYS = ["button", "song", "difficulty", "score"];
+
+const DEFAULT_OCR_LAYOUT_CONFIG = {
+  activePresetId: "default-16-9",
+  presets: [
+    {
+      id: "default-16-9",
+      label: "Default 16:9",
+      aspectRatio: 16 / 9,
+      regions: {
+        button: { x: 0.01, y: 0.01, w: 0.24, h: 0.16 },
+        song: { x: 0.32, y: 0.0, w: 0.48, h: 0.14 },
+        difficulty: { x: 0.37, y: 0.03, w: 0.16, h: 0.12 },
+        score: { x: 0.35, y: 0.58, w: 0.32, h: 0.23 }
+      }
+    }
+  ]
+};
 
 const REMOTE_CONFIG = {
   // Google Apps Script Web App URL. Empty string keeps local-only mode.
@@ -222,6 +242,120 @@ function normalizeCatalog(catalog) {
     buttons,
     difficulties
   };
+}
+
+function clampToUnit(value, fallback = 0) {
+  const normalized = Number(value);
+  if (!Number.isFinite(normalized)) {
+    return fallback;
+  }
+  return Math.max(0, Math.min(1, normalized));
+}
+
+function cloneRegions(regions) {
+  const source = regions && typeof regions === "object" ? regions : {};
+  return Object.fromEntries(
+    OCR_REGION_KEYS.map((key) => {
+      const region = source[key] && typeof source[key] === "object" ? source[key] : {};
+      return [key, {
+        x: Number(region.x) || 0,
+        y: Number(region.y) || 0,
+        w: Number(region.w) || 0,
+        h: Number(region.h) || 0
+      }];
+    })
+  );
+}
+
+function normalizeOcrRegion(region, fallbackRegion) {
+  const source = region && typeof region === "object" ? region : {};
+  const fallback = fallbackRegion && typeof fallbackRegion === "object" ? fallbackRegion : { x: 0, y: 0, w: 0.1, h: 0.1 };
+
+  const x = clampToUnit(source.x, clampToUnit(fallback.x, 0));
+  const y = clampToUnit(source.y, clampToUnit(fallback.y, 0));
+  const rawW = clampToUnit(source.w, clampToUnit(fallback.w, 0.1));
+  const rawH = clampToUnit(source.h, clampToUnit(fallback.h, 0.1));
+  const w = Math.max(0.01, Math.min(rawW, 1 - x));
+  const h = Math.max(0.01, Math.min(rawH, 1 - y));
+
+  return { x, y, w, h };
+}
+
+function normalizeOcrLayoutConfig(config) {
+  const source = config && typeof config === "object" ? config : {};
+  const defaultPreset = DEFAULT_OCR_LAYOUT_CONFIG.presets[0];
+  const defaultRegions = cloneRegions(defaultPreset.regions);
+  const rawPresets = Array.isArray(source.presets) ? source.presets : DEFAULT_OCR_LAYOUT_CONFIG.presets;
+
+  const presets = rawPresets
+    .map((preset, index) => {
+      if (!preset || typeof preset !== "object") {
+        return null;
+      }
+
+      const id = String(preset.id || `preset-${index + 1}`);
+      const label = String(preset.label || id);
+      const aspectRatio = Number(preset.aspectRatio);
+      const normalizedAspectRatio = Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : defaultPreset.aspectRatio;
+
+      const incomingRegions = preset.regions && typeof preset.regions === "object" ? preset.regions : {};
+      const regions = Object.fromEntries(
+        OCR_REGION_KEYS.map((key) => [
+          key,
+          normalizeOcrRegion(incomingRegions[key], defaultRegions[key])
+        ])
+      );
+
+      return {
+        id,
+        label,
+        aspectRatio: normalizedAspectRatio,
+        regions
+      };
+    })
+    .filter(Boolean);
+
+  const safePresets = presets.length > 0 ? presets : [
+    {
+      id: defaultPreset.id,
+      label: defaultPreset.label,
+      aspectRatio: defaultPreset.aspectRatio,
+      regions: Object.fromEntries(
+        OCR_REGION_KEYS.map((key) => [key, normalizeOcrRegion(defaultRegions[key], defaultRegions[key])])
+      )
+    }
+  ];
+
+  const activePresetId = safePresets.some((preset) => preset.id === source.activePresetId)
+    ? source.activePresetId
+    : safePresets[0].id;
+
+  return {
+    activePresetId,
+    presets: safePresets
+  };
+}
+
+function loadOcrLayoutConfig() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.ocrLayout);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return normalizeOcrLayoutConfig(parsed);
+  } catch {
+    return normalizeOcrLayoutConfig(null);
+  }
+}
+
+function saveOcrLayoutConfig(config) {
+  const normalized = normalizeOcrLayoutConfig(config);
+  localStorage.setItem(STORAGE_KEYS.ocrLayout, JSON.stringify(normalized));
+  return normalized;
+}
+
+function getActiveOcrLayoutPreset(config = loadOcrLayoutConfig()) {
+  const normalized = normalizeOcrLayoutConfig(config);
+  const found = normalized.presets.find((preset) => preset.id === normalized.activePresetId);
+  return found || normalized.presets[0];
 }
 
 function getSongNames(catalog) {
@@ -477,6 +611,62 @@ async function addSharedRecord(record) {
     return {
       ok: false,
       source: "local-only",
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+async function loadSharedOcrLayoutConfig() {
+  const localConfig = loadOcrLayoutConfig();
+
+  if (!isRemoteEnabled()) {
+    return { config: localConfig, source: "local" };
+  }
+
+  try {
+    const result = await remoteFetchJson({
+      action: "getOcrLayout",
+      token: REMOTE_CONFIG.readToken
+    });
+
+    if (!result || result.ok !== true) {
+      throw new Error(result?.error || "remote ocr layout fetch failed");
+    }
+
+    const remoteConfig = normalizeOcrLayoutConfig(result.config);
+    saveOcrLayoutConfig(remoteConfig);
+    return { config: remoteConfig, source: "remote" };
+  } catch {
+    return { config: localConfig, source: "local-fallback" };
+  }
+}
+
+async function saveSharedOcrLayoutConfig(config) {
+  const normalized = saveOcrLayoutConfig(config);
+
+  if (!isRemoteEnabled()) {
+    return { ok: true, source: "local", config: normalized };
+  }
+
+  try {
+    const result = await remoteFetchJson({
+      action: "setOcrLayout",
+      token: REMOTE_CONFIG.writeToken,
+      config: normalized
+    });
+
+    if (!result || result.ok !== true) {
+      throw new Error(result?.error || "remote ocr layout save failed");
+    }
+
+    const saved = normalizeOcrLayoutConfig(result.config);
+    saveOcrLayoutConfig(saved);
+    return { ok: true, source: "remote", config: saved };
+  } catch (error) {
+    return {
+      ok: false,
+      source: "local-only",
+      config: normalized,
       error: error instanceof Error ? error.message : String(error)
     };
   }

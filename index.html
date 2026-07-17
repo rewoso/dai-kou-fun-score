@@ -60,6 +60,21 @@
           <select id="entry-user" required></select>
         </label>
 
+        <div class="ocr-import">
+          <p class="picker-label">リザルト画像から自動入力 (ベータ)</p>
+          <label>画像ファイル
+            <input id="result-image-input" type="file" accept="image/*">
+          </label>
+          <p class="small muted">または、この画面でリザルト画像をクリップボードから貼り付け (Ctrl+V) できます。</p>
+          <button id="result-image-parse" type="button" class="secondary">画像から曲名/ボタン数/スコアを読み取る</button>
+          <div id="ocr-song-candidates" class="ocr-song-candidates" aria-live="polite"></div>
+          <p id="ocr-message" class="muted small" aria-live="polite"></p>
+          <details id="ocr-debug-panel" class="ocr-debug-panel">
+            <summary>OCRデバッグ表示</summary>
+            <pre id="ocr-debug-output" class="ocr-debug-output">まだ解析していません。</pre>
+          </details>
+        </div>
+
         <label>曲名フィルタ
           <input id="song-filter" type="text" placeholder="曲名を入力して絞り込み">
         </label>
@@ -164,6 +179,7 @@
 
   <script src="config.js"></script>
   <script src="common.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -72,6 +72,63 @@
       </div>
       <p class="muted small">GitHub Pagesは静的配信のため、サーバ保存はありません。同じランキングを複数端末で共有したい場合はJSON書き出し/読込を使って同期してください。</p>
     </section>
+
+    <section class="panel">
+      <h2>OCRレイアウト調整</h2>
+      <div class="ocr-layout-grid">
+        <div class="ocr-layout-tools">
+          <label>プレビュー画像
+            <input id="ocr-layout-image" type="file" accept="image/*">
+          </label>
+
+          <label>プリセット
+            <select id="ocr-layout-preset"></select>
+          </label>
+
+          <div class="tool-buttons compact">
+            <button type="button" id="ocr-layout-new" class="secondary">新規プリセット</button>
+            <button type="button" id="ocr-layout-save">保存</button>
+            <button type="button" id="ocr-layout-reset" class="secondary">初期化</button>
+            <button type="button" id="ocr-layout-export" class="secondary">JSON書き出し</button>
+            <label class="secondary pseudo-file">
+              JSON読込
+              <input id="ocr-layout-import" type="file" accept="application/json" hidden>
+            </label>
+          </div>
+
+          <label>編集中の領域
+            <select id="ocr-layout-region"></select>
+          </label>
+
+          <div class="ocr-range-grid">
+            <label>X
+              <input id="ocr-range-x" type="range" min="0" max="1000" step="1">
+              <span id="ocr-range-x-value" class="small muted">0.000</span>
+            </label>
+            <label>Y
+              <input id="ocr-range-y" type="range" min="0" max="1000" step="1">
+              <span id="ocr-range-y-value" class="small muted">0.000</span>
+            </label>
+            <label>W
+              <input id="ocr-range-w" type="range" min="10" max="1000" step="1">
+              <span id="ocr-range-w-value" class="small muted">0.000</span>
+            </label>
+            <label>H
+              <input id="ocr-range-h" type="range" min="10" max="1000" step="1">
+              <span id="ocr-range-h-value" class="small muted">0.000</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="ocr-layout-preview-wrap">
+          <div id="ocr-layout-preview-stage" class="ocr-layout-preview-stage">
+            <img id="ocr-layout-preview-image" alt="OCR調整用プレビュー">
+            <div id="ocr-layout-overlay" class="ocr-layout-overlay"></div>
+          </div>
+        </div>
+      </div>
+      <p id="ocr-layout-message" class="muted small" aria-live="polite"></p>
+    </section>
   </main>
 
   <script src="config.js"></script>
