@@ -666,17 +666,18 @@ async function main() {
   const scoreFormToggle = document.getElementById("score-form-toggle");
   const scoreFormBody = document.getElementById("score-form-body");
   if (scoreFormToggle && scoreFormBody) {
+    const setScoreFormCollapsed = (collapsed) => {
+      scoreFormBody.classList.toggle("is-collapsed", collapsed);
+      scoreFormToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      scoreFormToggle.textContent = collapsed ? "開く" : "閉じる";
+    };
+
+    const isMobileViewport = window.matchMedia("(max-width: 1000px)").matches;
+    setScoreFormCollapsed(isMobileViewport);
+
     scoreFormToggle.addEventListener("click", () => {
       const isOpen = scoreFormToggle.getAttribute("aria-expanded") === "true";
-      if (isOpen) {
-        scoreFormBody.classList.add("is-collapsed");
-        scoreFormToggle.setAttribute("aria-expanded", "false");
-        scoreFormToggle.textContent = "開く";
-      } else {
-        scoreFormBody.classList.remove("is-collapsed");
-        scoreFormToggle.setAttribute("aria-expanded", "true");
-        scoreFormToggle.textContent = "閉じる";
-      }
+      setScoreFormCollapsed(isOpen);
     });
   }
 }
