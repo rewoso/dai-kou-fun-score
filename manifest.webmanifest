@@ -1,0 +1,25 @@
+{
+  "name": "DJMAX 大興奮ランキング",
+  "short_name": "DJMAX順位",
+  "description": "DJMAXの身内向けスコアランキングアプリ",
+  "lang": "ja",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#061114",
+  "theme_color": "#061114",
+  "icons": [
+    {
+      "src": "./icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

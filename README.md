@@ -9,6 +9,7 @@ GitHub Pages上で動く、シンプルなDJMAXスコアランキングです。
 - 管理者ページでプレイヤー管理
 - 利用者ページでスコア入力とランキング表示
 - Google Apps Script + Google Drive JSON で共有保存対応
+- PWA対応（ホーム画面追加・オフライン時の静的アセット表示）
 
 ## 初期パスワード
 
@@ -104,6 +105,17 @@ node scripts/generate-catalog-from-wiki.mjs --in ./wiki-169.html --out ./catalog
 3. `Build and deployment` で `Deploy from a branch` を選択
 4. ブランチに `main`、フォルダに `/ (root)` を選択
 5. 数分後に公開URLが発行される
+
+## PWAについて
+
+- `manifest.webmanifest` と `service-worker.js` を同梱しています
+- 初回アクセス後は、主要な静的ファイル（HTML/CSS/JS/アイコン）をキャッシュします
+- オフライン時は、キャッシュ済みのページと静的ファイルを表示できます
+
+### キャッシュ更新
+
+- キャッシュ構成を変更した場合は `service-worker.js` の `CACHE_VERSION` を更新してください
+- 既存キャッシュは次回アクセス時に自動で置き換わります
 
 ## 注意
 
