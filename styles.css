@@ -254,6 +254,11 @@ th {
   text-align: right;
 }
 
+.ranking table th:nth-child(2),
+.ranking table td:nth-child(2) {
+  min-width: 5em;
+}
+
 .ranking-song-trigger {
   width: auto;
   max-width: 100%;
@@ -278,6 +283,11 @@ th {
 .ranking-song-trigger:focus-visible {
   outline: 2px solid var(--accent-2);
   outline-offset: 2px;
+}
+
+.mobile-song-meta,
+.mobile-score-rate {
+  display: none;
 }
 
 .difficulty-pill {
@@ -635,6 +645,34 @@ tbody tr {
 
   .filter-user-extra-row select {
     min-width: 0;
+  }
+
+  .ranking table {
+    min-width: 0;
+  }
+
+  .ranking table th:nth-child(4),
+  .ranking table th:nth-child(5),
+  .ranking table th:nth-child(7),
+  .ranking table td:nth-child(4),
+  .ranking table td:nth-child(5),
+  .ranking table td:nth-child(7) {
+    display: none;
+  }
+
+  .mobile-song-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.35rem;
+  }
+
+  .mobile-score-rate {
+    display: block;
+    margin-top: 0.15rem;
+    color: var(--muted);
+    font-size: 0.82rem;
+    line-height: 1.2;
   }
 }
 

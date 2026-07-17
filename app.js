@@ -127,6 +127,22 @@ function renderTable(rows, onSongClick) {
       } else {
         songCell.textContent = row.song;
       }
+
+      const mobileSongMeta = document.createElement("div");
+      mobileSongMeta.className = "mobile-song-meta";
+      mobileSongMeta.innerHTML = `
+        <span class="button-pill ${getButtonDisplayClass(row.button)}">${row.button}</span>
+        <span class="difficulty-pill ${getDifficultyDisplayClass(row.difficulty)}">${row.difficulty}</span>
+      `;
+      songCell.appendChild(mobileSongMeta);
+    }
+
+    const scoreCell = tr.children[5];
+    if (scoreCell) {
+      const mobileScoreRate = document.createElement("div");
+      mobileScoreRate.className = "mobile-score-rate";
+      mobileScoreRate.textContent = `(${scoreRate}%)`;
+      scoreCell.appendChild(mobileScoreRate);
     }
 
     body.appendChild(tr);
