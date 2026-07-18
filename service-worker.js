@@ -5,7 +5,7 @@ const CORE_ASSETS = [
   "./",
   "./index.html",
   "./admin.html",
-  "./styles.css",
+  "./styles.css?v=2",
   "./config.js",
   "./common.js",
   "./app.js",
@@ -44,6 +44,12 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (request.mode === "navigate") {
+    event.respondWith(networkFirst(request));
+    return;
+  }
+
+  // CSS/JS は常にネットワーク優先で取得し、更新を即時反映する
+  if (/\.(?:css|js)(?:\?.*)?$/.test(url.pathname)) {
     event.respondWith(networkFirst(request));
     return;
   }
