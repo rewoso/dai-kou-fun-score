@@ -483,6 +483,7 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
   const scoreInput = document.getElementById("entry-score");
   const form = document.getElementById("user-score-form");
   const message = document.getElementById("entry-message");
+  const existingScoreHint = document.getElementById("entry-existing-score");
 
   if (!entryUser || !songFilter || !entrySong || !scoreInput || !form || !message) {
     return;
@@ -497,11 +498,33 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
   }
   entryUser.addEventListener("change", () => {
     localStorage.setItem("djmax_selected_player", entryUser.value);
+    refreshExistingScore();
   });
 
   const state = {
     button: catalog.buttons[0] || "",
     difficulty: catalog.difficulties[0] || ""
+  };
+
+  const refreshExistingScore = () => {
+    if (!existingScoreHint) return;
+    const user = entryUser.value;
+    const song = entrySong.value;
+    const button = state.button;
+    const difficulty = state.difficulty;
+    if (!user || !song || !button || !difficulty) {
+      existingScoreHint.hidden = true;
+      return;
+    }
+    const best = recordsRef.get()
+      .filter((r) => r.user === user && r.song === song && r.button === button && r.difficulty === difficulty)
+      .reduce((max, r) => Math.max(max, Number(r.score)), -Infinity);
+    if (best === -Infinity) {
+      existingScoreHint.hidden = true;
+    } else {
+      existingScoreHint.textContent = `登録済スコア: ${best.toLocaleString()}`;
+      existingScoreHint.hidden = false;
+    }
   };
 
   const refreshDifficultyButtons = () => {
@@ -519,7 +542,10 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
       }
       state.difficulty = value;
       refreshDifficultyButtons();
+      refreshExistingScore();
     }, hidden);
+
+    refreshExistingScore();
   };
 
   const refreshSongs = () => {
