@@ -490,6 +490,15 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
 
   setSelectOptions(entryUser, uniqueSorted(catalog.users));
 
+  // Restore previously selected player from localStorage
+  const savedPlayer = localStorage.getItem("djmax_selected_player");
+  if (savedPlayer && [...entryUser.options].some((o) => o.value === savedPlayer)) {
+    entryUser.value = savedPlayer;
+  }
+  entryUser.addEventListener("change", () => {
+    localStorage.setItem("djmax_selected_player", entryUser.value);
+  });
+
   const state = {
     button: catalog.buttons[0] || "",
     difficulty: catalog.difficulties[0] || ""
