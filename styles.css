@@ -641,7 +641,11 @@ tbody tr {
   }
 
   .filter-user-field {
-    grid-column: auto;
+    grid-column: span 2;
+  }
+
+  .filter-button-label {
+    grid-column-start: 1;
   }
 
   .filter-user-control select {
