@@ -221,7 +221,7 @@ async function main() {
     }
 
     if (message) {
-      message.textContent = saveResult.ok ? "全スコアを削除しました。"
+      message.textContent = saveResult.ok ? "全スコアを削除しました。" : `ローカル保存のみ成功。共有反映失敗: ${saveResult.error}`;
     }
   });
 }
