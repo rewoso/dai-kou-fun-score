@@ -636,11 +636,6 @@ tbody tr {
 }
 
 @media (max-width: 1000px) {
-  .site-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
   .auth-form {
     flex-direction: column;
   }
