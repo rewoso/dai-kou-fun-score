@@ -635,7 +635,7 @@ tbody tr {
   cursor: pointer;
 }
 
-@media (max-width: 1000px) {
+@media (max-width: 1400px) {
   .auth-form {
     flex-direction: column;
   }
