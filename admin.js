@@ -89,7 +89,7 @@ async function main() {
 
     if (!playerName) {
       if (message) {
-        message.textContent = "プレイヤー名を入力してください。";
+        message.textContent = "プレイヤーを入力してください。";
       }
       return;
     }
