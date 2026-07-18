@@ -178,7 +178,7 @@ input, select, button {
   color: var(--text);
   padding: 0.65rem 0.75rem;
   font-family: inherit;
-  font-size: 0.95rem;
+  font-size: 1rem;
 }
 
 button {
