@@ -33,7 +33,7 @@ function toRankingRows(records) {
   for (const record of records) {
     const key = `${record.song}__${record.button}__${record.difficulty}__${record.user}`;
     const existing = bestByChartAndUser.get(key);
-    if (!existing || Number(record.score) > Number(existing.score)) {
+    if (!existing || new Date(record.createdAt) > new Date(existing.createdAt)) {
       bestByChartAndUser.set(key, record);
     }
   }
@@ -516,13 +516,13 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
       existingScoreHint.hidden = true;
       return;
     }
-    const best = recordsRef.get()
-      .filter((r) => r.user === user && r.song === song && r.button === button && r.difficulty === difficulty)
-      .reduce((max, r) => Math.max(max, Number(r.score)), -Infinity);
-    if (best === -Infinity) {
+    const matched = recordsRef.get()
+      .filter((r) => r.user === user && r.song === song && r.button === button && r.difficulty === difficulty);
+    const latest = matched.reduce((a, b) => new Date(a.createdAt) > new Date(b.createdAt) ? a : b, null);
+    if (!latest) {
       existingScoreHint.hidden = true;
     } else {
-      existingScoreHint.textContent = `登録済スコア: ${best.toLocaleString()}`;
+      existingScoreHint.textContent = `登録済スコア: ${Number(latest.score).toLocaleString()}`;
       existingScoreHint.hidden = false;
     }
   };
@@ -600,11 +600,11 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
       return;
     }
 
-    // 登録前に同一曲+ボタン+難易度の全ユーザー最高スコアを確認
-    const prevBest = recordsRef.get()
-      .filter((r) => r.song === song && r.button === button && r.difficulty === difficulty)
-      .reduce((max, r) => Math.max(max, Number(r.score)), -Infinity);
-    const isNewBest = score > prevBest || prevBest === -Infinity;
+    // 登録前に同一曲+ボタン+難易度の全ユーザー最新スコアを確認
+    const allChartRecords = recordsRef.get()
+      .filter((r) => r.song === song && r.button === button && r.difficulty === difficulty);
+    const prevLatest = allChartRecords.reduce((a, b) => !a || new Date(b.createdAt) > new Date(a.createdAt) ? b : a, null);
+    const isNewBest = !prevLatest || score > Number(prevLatest.score);
 
     const payload = {
       id: crypto.randomUUID(),
