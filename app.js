@@ -24,7 +24,8 @@ function applyRecentUpdateLimit(records, limit) {
 
   return [...records]
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-    .slice(0, normalizedLimit);
+    .slice(0, normalizedLimit)
+    .sort((a, b) => Number(b.score) - Number(a.score) || (new Date(b.createdAt) - new Date(a.createdAt)));
 }
 
 function toRankingRows(records) {
@@ -414,8 +415,8 @@ function initRanking(catalog, recordsRef) {
     };
 
     const filtered = applyFilters(records, filters);
-    const recentOnly = applyRecentUpdateLimit(filtered, filters.recentLimit);
-    const rows = toRankingRows(recentOnly);
+    const deduped = toRankingRows(filtered);
+    const rows = applyRecentUpdateLimit(deduped, filters.recentLimit);
     renderTable(rows, (chart) => {
       setSelectValueIfExists(songSelect, chart.song);
       setSelectValueIfExists(buttonSelect, chart.button);
