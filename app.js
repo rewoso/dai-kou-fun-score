@@ -93,7 +93,7 @@ function renderTable(rows, onSongClick) {
   for (const [index, row] of rows.entries()) {
     const tr = document.createElement("tr");
     const score = Number(row.score) || 0;
-    const scoreRate = (score / 10000).toFixed(2);
+    const scoreRate = (Math.floor((score / 10000) * 100) / 100).toFixed(2);
     const scoreRank = getScoreRank(score);
     const rankClasses = getScoreRankClasses(scoreRank, score);
     tr.innerHTML = `
