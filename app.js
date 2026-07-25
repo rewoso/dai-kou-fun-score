@@ -282,6 +282,8 @@ function createCanvas(width, height) {
 
 const OCR_SUPPORTED_WIDTH = 1920;
 const OCR_SUPPORTED_HEIGHT = 1080;
+const OCR_SUPPORTED_ASPECT_RATIO = OCR_SUPPORTED_WIDTH / OCR_SUPPORTED_HEIGHT;
+const OCR_SUPPORTED_ASPECT_RATIO_TOLERANCE = 0.02;
 
 const DIFFICULTY_TEMPLATE_DEFS = [
   {
@@ -558,6 +560,33 @@ async function getImageDimensions(file) {
   } finally {
     URL.revokeObjectURL(imageUrl);
   }
+}
+
+function isSupportedOcrImageSize(width, height) {
+  const safeWidth = Number(width) || 0;
+  const safeHeight = Number(height) || 0;
+  if (safeWidth < OCR_SUPPORTED_WIDTH || safeHeight < OCR_SUPPORTED_HEIGHT) {
+    return false;
+  }
+
+  const aspectRatio = safeWidth / safeHeight;
+  return Math.abs(aspectRatio - OCR_SUPPORTED_ASPECT_RATIO) <= OCR_SUPPORTED_ASPECT_RATIO_TOLERANCE;
+}
+
+function normalizeOcrSourceCanvas(canvas) {
+  if (!canvas || canvas.width === OCR_SUPPORTED_WIDTH && canvas.height === OCR_SUPPORTED_HEIGHT) {
+    return canvas;
+  }
+
+  const normalized = createCanvas(OCR_SUPPORTED_WIDTH, OCR_SUPPORTED_HEIGHT);
+  const context = normalized.getContext("2d");
+  if (!context) {
+    return canvas;
+  }
+
+  context.imageSmoothingEnabled = true;
+  context.drawImage(canvas, 0, 0, OCR_SUPPORTED_WIDTH, OCR_SUPPORTED_HEIGHT);
+  return normalized;
 }
 
 async function loadImageFromPath(src) {
@@ -853,6 +882,31 @@ function extractImageFileFromClipboard(event) {
   return null;
 }
 
+async function extractImageFileFromSystemClipboard() {
+  if (!navigator.clipboard?.read) {
+    throw new Error("このブラウザではクリップボード画像の読み取りに対応していません。");
+  }
+
+  const items = await navigator.clipboard.read();
+  for (const item of items) {
+    for (const type of item.types || []) {
+      if (!String(type).startsWith("image/")) {
+        continue;
+      }
+
+      const blob = await item.getType(type);
+      if (blob) {
+        const extension = (blob.type.split("/")[1] || "png").replace(/[^a-z0-9]/gi, "");
+        return new File([blob], `clipboard-${Date.now()}.${extension || "png"}`, {
+          type: blob.type || "image/png"
+        });
+      }
+    }
+  }
+
+  return null;
+}
+
 function cropCanvasRegion(canvas, region) {
   const startX = Math.floor(clamp01(region.x) * canvas.width);
   const startY = Math.floor(clamp01(region.y) * canvas.height);
@@ -994,7 +1048,7 @@ function pickOcrPresetForImage(config, width, height) {
 }
 
 async function parseResultImage(file, catalog, onStatus) {
-  const sourceCanvas = await imageFileToCanvas(file);
+  const sourceCanvas = normalizeOcrSourceCanvas(await imageFileToCanvas(file));
   const songNames = getSongNames(catalog);
   const layoutConfig = loadOcrLayoutConfig();
   const preset = pickOcrPresetForImage(layoutConfig, sourceCanvas.width, sourceCanvas.height);
@@ -1533,8 +1587,7 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
   const entrySong = document.getElementById("entry-song");
   const scoreInput = document.getElementById("entry-score");
   const resultImageInput = document.getElementById("result-image-input");
-  const resultImageParseButton = document.getElementById("result-image-parse");
-  const ocrSongCandidates = document.getElementById("ocr-song-candidates");
+  const resultImagePasteButton = document.getElementById("result-image-paste");
   const ocrMessage = document.getElementById("ocr-message");
   const ocrDebugOutput = document.getElementById("ocr-debug-output");
   const form = document.getElementById("user-score-form");
@@ -1694,36 +1747,6 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
     return true;
   };
 
-  const renderSongCandidates = (candidates) => {
-    if (!ocrSongCandidates) {
-      return;
-    }
-
-    ocrSongCandidates.innerHTML = "";
-    const safeCandidates = Array.isArray(candidates) ? candidates : [];
-
-    for (const candidate of safeCandidates) {
-      if (!candidate || !candidate.song) {
-        continue;
-      }
-
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "ocr-song-candidate-btn";
-      const confidence = Math.round((Number(candidate.confidence) || 0) * 100);
-      button.textContent = `${candidate.song} (${confidence}%)`;
-      button.addEventListener("click", () => {
-        const applied = setSongValue(candidate.song);
-        if (ocrMessage) {
-          ocrMessage.textContent = applied
-            ? `候補から曲名を適用しました: ${candidate.song}`
-            : "候補の適用に失敗しました。";
-        }
-      });
-      ocrSongCandidates.appendChild(button);
-    }
-  };
-
   const runOcrImport = async (file, sourceLabel = "ファイル") => {
     if (!(file instanceof File)) {
       if (ocrMessage) {
@@ -1742,9 +1765,9 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
       return;
     }
 
-    const isSupportedSize = dimensions.width === OCR_SUPPORTED_WIDTH && dimensions.height === OCR_SUPPORTED_HEIGHT;
+    const isSupportedSize = isSupportedOcrImageSize(dimensions.width, dimensions.height);
     if (!isSupportedSize) {
-      const sizeMessage = `${sourceLabel}画像サイズ ${dimensions.width}x${dimensions.height} は非対応です。${OCR_SUPPORTED_WIDTH}x${OCR_SUPPORTED_HEIGHT} サイズの画像でアップロードしてから貼り付けてください。`;
+      const sizeMessage = `${sourceLabel}画像サイズ ${dimensions.width}x${dimensions.height} は非対応です。${OCR_SUPPORTED_WIDTH}x${OCR_SUPPORTED_HEIGHT} 以上の16:9画像をコピーしてから貼り付けてください。`;
       if (ocrMessage) {
         ocrMessage.textContent = sizeMessage;
       }
@@ -1764,8 +1787,12 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
       return;
     }
 
-    if (resultImageParseButton) {
-      resultImageParseButton.disabled = true;
+    if (ocrMessage) {
+      ocrMessage.textContent = `${sourceLabel}画像を 1920x1080 に正規化して解析します...`;
+    }
+
+    if (resultImagePasteButton) {
+      resultImagePasteButton.disabled = true;
     }
 
     try {
@@ -1776,9 +1803,6 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
       });
 
       if (ocrDebugOutput) {
-        const songCandidates = (parsed.songCandidates || [])
-          .map((candidate) => `${candidate.song} (${Math.round((Number(candidate.confidence) || 0) * 100)}%)`)
-          .join("\n") || "-";
         const templateLoadedLines = (parsed.difficultyTemplateDiagnostics?.loaded || [])
           .map((item) => `${item.difficulty}: ${item.usedPath || item.src}`)
           .join("\n") || "-";
@@ -1813,14 +1837,9 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
           parsed.rawButton || "",
           "",
           "[raw score OCR]",
-          parsed.rawScore || "",
-          "",
-          "[song candidates]",
-          songCandidates
+          parsed.rawScore || ""
         ].join("\n");
       }
-
-      renderSongCandidates(parsed.songCandidates);
 
       const applied = [];
       const notes = [];
@@ -1856,26 +1875,37 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
         }
       }
     } catch (error) {
-      renderSongCandidates([]);
       if (ocrMessage) {
         ocrMessage.textContent = `画像解析エラー: ${error instanceof Error ? error.message : "不明なエラー"}`;
       }
     } finally {
-      if (resultImageParseButton) {
-        resultImageParseButton.disabled = false;
+      if (resultImagePasteButton) {
+        resultImagePasteButton.disabled = false;
       }
     }
   };
 
-  resultImageParseButton?.addEventListener("click", async () => {
-    const file = resultImageInput?.files?.[0];
-    if (!file) {
-      if (ocrMessage) {
-        ocrMessage.textContent = "先に画像ファイルを選択してください。";
-      }
-      return;
+  resultImagePasteButton?.addEventListener("click", async () => {
+    if (ocrMessage) {
+      ocrMessage.textContent = "クリップボード画像を読み取っています...";
     }
-    await runOcrImport(file, "ファイル");
+
+    try {
+      const file = await extractImageFileFromSystemClipboard();
+      if (!file) {
+        if (ocrMessage) {
+          ocrMessage.textContent = "クリップボードに画像がありません。画像をコピーしてから押してください。";
+        }
+        return;
+      }
+
+      setFileToInput(resultImageInput, file);
+      await runOcrImport(file, "クリップボード");
+    } catch (error) {
+      if (ocrMessage) {
+        ocrMessage.textContent = `クリップボード画像の読み取りに失敗しました。${error instanceof Error ? ` (${error.message})` : ""}`;
+      }
+    }
   });
 
   document.addEventListener("paste", async (event) => {

@@ -70,8 +70,10 @@
         <div class="ocr-import">
           <p class="picker-label">リザルト画像から自動入力 (ベータ)</p>
           <input id="result-image-input" type="file" accept="image/*" hidden>
-          <p class="small muted">この機能は 1920x1080 の画像のみ対応です。リザルト画像をクリップボードから貼り付け (Ctrl+V) してください。</p>
-          <div id="ocr-song-candidates" class="ocr-song-candidates" aria-live="polite"></div>
+          <div class="ocr-import-actions">
+            <button id="result-image-paste" type="button" class="secondary">クリップボードのリザルト画像を貼り付け</button>
+            <p class="small muted ocr-import-note">1920x1080 以上の16:9の画像のみ対応です。</p>
+          </div>
           <p id="ocr-message" class="muted small" aria-live="polite"></p>
           <details id="ocr-debug-panel" class="ocr-debug-panel">
             <summary>OCRデバッグ表示</summary>

@@ -539,6 +539,17 @@ tbody tr {
   background: rgba(18, 36, 45, 0.35);
 }
 
+.ocr-import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 0.75rem;
+}
+
+.ocr-import-note {
+  margin: 0;
+}
+
 .ocr-song-candidates {
   display: flex;
   flex-wrap: wrap;
