@@ -519,7 +519,12 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
     }
     const matched = recordsRef.get()
       .filter((r) => r.user === user && r.song === song && r.button === button && r.difficulty === difficulty);
-    const latest = matched.reduce((a, b) => new Date(a.createdAt) > new Date(b.createdAt) ? a : b, null);
+    const latest = matched.reduce((a, b) => {
+      if (!a) {
+        return b;
+      }
+      return new Date(a.createdAt) > new Date(b.createdAt) ? a : b;
+    }, null);
     if (!latest) {
       existingScoreHint.hidden = true;
     } else {
