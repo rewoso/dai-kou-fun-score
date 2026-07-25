@@ -24,7 +24,8 @@ function applyRecentUpdateLimit(records, limit) {
 
   return [...records]
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-    .slice(0, normalizedLimit);
+    .slice(0, normalizedLimit)
+    .sort((a, b) => Number(b.score) - Number(a.score) || (new Date(b.createdAt) - new Date(a.createdAt)));
 }
 
 function toRankingRows(records) {
@@ -33,7 +34,7 @@ function toRankingRows(records) {
   for (const record of records) {
     const key = `${record.song}__${record.button}__${record.difficulty}__${record.user}`;
     const existing = bestByChartAndUser.get(key);
-    if (!existing || Number(record.score) > Number(existing.score)) {
+    if (!existing || new Date(record.createdAt) > new Date(existing.createdAt)) {
       bestByChartAndUser.set(key, record);
     }
   }
@@ -93,7 +94,7 @@ function renderTable(rows, onSongClick) {
   for (const [index, row] of rows.entries()) {
     const tr = document.createElement("tr");
     const score = Number(row.score) || 0;
-    const scoreRate = (score / 10000).toFixed(2);
+    const scoreRate = (Math.floor((score / 10000) * 100) / 100).toFixed(2);
     const scoreRank = getScoreRank(score);
     const rankClasses = getScoreRankClasses(scoreRank, score);
     tr.innerHTML = `
@@ -127,6 +128,22 @@ function renderTable(rows, onSongClick) {
       } else {
         songCell.textContent = row.song;
       }
+
+      const mobileSongMeta = document.createElement("div");
+      mobileSongMeta.className = "mobile-song-meta";
+      mobileSongMeta.innerHTML = `
+        <span class="button-pill ${getButtonDisplayClass(row.button)}">${row.button}</span>
+        <span class="difficulty-pill ${getDifficultyDisplayClass(row.difficulty)}">${row.difficulty}</span>
+      `;
+      songCell.appendChild(mobileSongMeta);
+    }
+
+    const scoreCell = tr.children[5];
+    if (scoreCell) {
+      const mobileScoreRate = document.createElement("div");
+      mobileScoreRate.className = "mobile-score-rate";
+      mobileScoreRate.textContent = `(${scoreRate}%)`;
+      scoreCell.appendChild(mobileScoreRate);
     }
 
     body.appendChild(tr);
@@ -1078,9 +1095,22 @@ function initRanking(catalog, recordsRef) {
     };
 
     const filtered = applyFilters(records, filters);
-    const recentOnly = applyRecentUpdateLimit(filtered, filters.recentLimit);
-    const rows = toRankingRows(recentOnly);
+    const deduped = toRankingRows(filtered);
+    const rows = applyRecentUpdateLimit(deduped, filters.recentLimit);
     renderTable(rows, (chart) => {
+      const isSameChartSelected =
+        (songSelect?.value || "") === chart.song &&
+        (buttonSelect?.value || "") === chart.button &&
+        (difficultySelect?.value || "") === chart.difficulty;
+
+      if (isSameChartSelected) {
+        setSelectValueIfExists(songSelect, "");
+        setSelectValueIfExists(buttonSelect, "");
+        setSelectValueIfExists(difficultySelect, "");
+        rerender();
+        return;
+      }
+
       setSelectValueIfExists(songSelect, chart.song);
       setSelectValueIfExists(buttonSelect, chart.button);
       setSelectValueIfExists(difficultySelect, chart.difficulty);
@@ -1152,6 +1182,7 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
   const ocrDebugOutput = document.getElementById("ocr-debug-output");
   const form = document.getElementById("user-score-form");
   const message = document.getElementById("entry-message");
+  const existingScoreHint = document.getElementById("entry-existing-score");
 
   if (!entryUser || !songFilter || !entrySong || !scoreInput || !form || !message) {
     return;
@@ -1159,9 +1190,45 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
 
   setSelectOptions(entryUser, uniqueSorted(catalog.users));
 
+  // Restore previously selected player from localStorage
+  const savedPlayer = localStorage.getItem("djmax_selected_player");
+  if (savedPlayer && [...entryUser.options].some((o) => o.value === savedPlayer)) {
+    entryUser.value = savedPlayer;
+  }
+  entryUser.addEventListener("change", () => {
+    localStorage.setItem("djmax_selected_player", entryUser.value);
+    refreshExistingScore();
+  });
+
   const state = {
     button: catalog.buttons[0] || "",
     difficulty: catalog.difficulties[0] || ""
+  };
+
+  const refreshExistingScore = () => {
+    if (!existingScoreHint) return;
+    const user = entryUser.value;
+    const song = entrySong.value;
+    const button = state.button;
+    const difficulty = state.difficulty;
+    if (!user || !song || !button || !difficulty) {
+      existingScoreHint.hidden = true;
+      return;
+    }
+    const matched = recordsRef.get()
+      .filter((r) => r.user === user && r.song === song && r.button === button && r.difficulty === difficulty);
+    const latest = matched.reduce((a, b) => {
+      if (!a) {
+        return b;
+      }
+      return new Date(a.createdAt) > new Date(b.createdAt) ? a : b;
+    }, null);
+    if (!latest) {
+      existingScoreHint.hidden = true;
+    } else {
+      existingScoreHint.textContent = `登録済スコア: ${Number(latest.score).toLocaleString()}`;
+      existingScoreHint.hidden = false;
+    }
   };
 
   const refreshDifficultyButtons = () => {
@@ -1179,7 +1246,10 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
       }
       state.difficulty = value;
       refreshDifficultyButtons();
+      refreshExistingScore();
     }, hidden);
+
+    refreshExistingScore();
   };
 
   const refreshSongs = () => {
@@ -1428,11 +1498,11 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
       return;
     }
 
-    // 登録前に同一曲+ボタン+難易度の全ユーザー最高スコアを確認
-    const prevBest = recordsRef.get()
-      .filter((r) => r.song === song && r.button === button && r.difficulty === difficulty)
-      .reduce((max, r) => Math.max(max, Number(r.score)), -Infinity);
-    const isNewBest = score > prevBest || prevBest === -Infinity;
+    // 登録前に同一曲+ボタン+難易度の全ユーザー最新スコアを確認
+    const allChartRecords = recordsRef.get()
+      .filter((r) => r.song === song && r.button === button && r.difficulty === difficulty);
+    const prevLatest = allChartRecords.reduce((a, b) => !a || new Date(b.createdAt) > new Date(a.createdAt) ? b : a, null);
+    const isNewBest = !prevLatest || score > Number(prevLatest.score);
 
     const payload = {
       id: crypto.randomUUID(),
@@ -1542,17 +1612,18 @@ async function main() {
   const scoreFormToggle = document.getElementById("score-form-toggle");
   const scoreFormBody = document.getElementById("score-form-body");
   if (scoreFormToggle && scoreFormBody) {
+    const setScoreFormCollapsed = (collapsed) => {
+      scoreFormBody.classList.toggle("is-collapsed", collapsed);
+      scoreFormToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      scoreFormToggle.textContent = collapsed ? "開く" : "閉じる";
+    };
+
+    const isMobileViewport = window.matchMedia("(max-width: 1000px)").matches;
+    setScoreFormCollapsed(isMobileViewport);
+
     scoreFormToggle.addEventListener("click", () => {
       const isOpen = scoreFormToggle.getAttribute("aria-expanded") === "true";
-      if (isOpen) {
-        scoreFormBody.classList.add("is-collapsed");
-        scoreFormToggle.setAttribute("aria-expanded", "false");
-        scoreFormToggle.textContent = "開く";
-      } else {
-        scoreFormBody.classList.remove("is-collapsed");
-        scoreFormToggle.setAttribute("aria-expanded", "true");
-        scoreFormToggle.textContent = "閉じる";
-      }
+      setScoreFormCollapsed(isOpen);
     });
   }
 }

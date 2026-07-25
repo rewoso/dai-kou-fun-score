@@ -178,7 +178,7 @@ input, select, button {
   color: var(--text);
   padding: 0.65rem 0.75rem;
   font-family: inherit;
-  font-size: 0.95rem;
+  font-size: 1rem;
 }
 
 button {
@@ -254,6 +254,11 @@ th {
   text-align: right;
 }
 
+.ranking table th:nth-child(2),
+.ranking table td:nth-child(2) {
+  min-width: 7em;
+}
+
 .ranking-song-trigger {
   width: auto;
   max-width: 100%;
@@ -278,6 +283,11 @@ th {
 .ranking-song-trigger:focus-visible {
   outline: 2px solid var(--accent-2);
   outline-offset: 2px;
+}
+
+.mobile-song-meta,
+.mobile-score-rate {
+  display: none;
 }
 
 .difficulty-pill {
@@ -470,6 +480,16 @@ tbody tr {
 
 .muted {
   color: var(--muted);
+}
+
+.existing-score-hint {
+  font-size: 0.9rem;
+  color: var(--muted);
+  background: rgba(0, 200, 255, 0.08);
+  border-left: 3px solid var(--accent, #00c8ff);
+  padding: 0.35rem 0.7rem;
+  border-radius: 0 6px 6px 0;
+  margin: 0;
 }
 
 .small {
@@ -748,18 +768,17 @@ tbody tr {
   cursor: pointer;
 }
 
-@media (max-width: 700px) {
-  .site-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
+@media (max-width: 1400px) {
   .auth-form {
     flex-direction: column;
   }
 
   .filter-user-field {
-    grid-column: auto;
+    grid-column: span 2;
+  }
+
+  .filter-button-label {
+    grid-column-start: 1;
   }
 
   .filter-user-control select {
@@ -772,6 +791,34 @@ tbody tr {
 
   .ocr-layout-grid {
     grid-template-columns: 1fr;
+  }
+
+  .ranking table {
+    min-width: 0;
+  }
+
+  .ranking table th:nth-child(4),
+  .ranking table th:nth-child(5),
+  .ranking table th:nth-child(7),
+  .ranking table td:nth-child(4),
+  .ranking table td:nth-child(5),
+  .ranking table td:nth-child(7) {
+    display: none;
+  }
+
+  .mobile-song-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.35rem;
+  }
+
+  .mobile-score-rate {
+    display: block;
+    margin-top: 0.15rem;
+    color: var(--muted);
+    font-size: 0.82rem;
+    line-height: 1.2;
   }
 }
 

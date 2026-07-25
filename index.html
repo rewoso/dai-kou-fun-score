@@ -2,12 +2,19 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=0.5, minimum-scale=0.25, maximum-scale=5.0, user-scalable=yes">
   <title>DJMAX 大興奮ランキング</title>
+  <meta name="theme-color" content="#061114">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=2">
 </head>
 <body data-page="user">
   <div class="bg-glow bg-glow-1" aria-hidden="true"></div>
@@ -56,7 +63,7 @@
       </div>
       <div id="score-form-body">
       <form id="user-score-form" class="stack-form">
-        <label>プレイヤー名
+        <label>プレイヤー
           <select id="entry-user" required></select>
         </label>
 
@@ -93,6 +100,8 @@
           <div id="entry-difficulty-group" class="choice-group"></div>
         </div>
 
+        <p id="entry-existing-score" class="existing-score-hint" aria-live="polite" hidden></p>
+
         <label>スコア
           <input id="entry-score" type="number" min="0" step="1" required placeholder="例: 987654">
         </label>
@@ -107,7 +116,7 @@
       <h2>絞り込み</h2>
       <div class="filter-grid">
         <div class="filter-user-field">
-          <label for="filter-user">ユーザー名</label>
+          <label for="filter-user">プレイヤー</label>
           <div class="filter-user-control">
             <select id="filter-user"><option value="">すべて</option></select>
             <label class="inline-toggle" for="filter-user-multi">
@@ -126,7 +135,7 @@
           曲名
           <select id="filter-song"><option value="">すべて</option></select>
         </label>
-        <label>
+        <label class="filter-button-label">
           ボタン数
           <select id="filter-button"><option value="">すべて</option></select>
         </label>
@@ -160,7 +169,7 @@
           <thead>
             <tr>
               <th>順位</th>
-              <th>ユーザー名</th>
+              <th>プレイヤー</th>
               <th>曲名</th>
               <th>ボタン</th>
               <th>難易度</th>
@@ -180,6 +189,7 @@
   <script src="config.js"></script>
   <script src="common.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="pwa-register.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
