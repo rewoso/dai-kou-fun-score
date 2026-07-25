@@ -418,6 +418,19 @@ function initRanking(catalog, recordsRef) {
     const deduped = toRankingRows(filtered);
     const rows = applyRecentUpdateLimit(deduped, filters.recentLimit);
     renderTable(rows, (chart) => {
+      const isSameChartSelected =
+        (songSelect?.value || "") === chart.song &&
+        (buttonSelect?.value || "") === chart.button &&
+        (difficultySelect?.value || "") === chart.difficulty;
+
+      if (isSameChartSelected) {
+        setSelectValueIfExists(songSelect, "");
+        setSelectValueIfExists(buttonSelect, "");
+        setSelectValueIfExists(difficultySelect, "");
+        rerender();
+        return;
+      }
+
       setSelectValueIfExists(songSelect, chart.song);
       setSelectValueIfExists(buttonSelect, chart.button);
       setSelectValueIfExists(difficultySelect, chart.difficulty);
