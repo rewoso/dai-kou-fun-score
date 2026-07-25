@@ -37,6 +37,16 @@ GitHub Pages上で動く、シンプルなDJMAXスコアランキングです。
 
 ファイル選択のほか、利用者ページ上で `Ctrl+V` による画像貼り付けにも対応しています。
 
+難易度判定は OCR に加えて、テンプレート画像比較にも対応しています。
+以下の画像を配置すると、`NORMAL/HARD/MAXIMUM/SC` のバッジ比較で判定精度を上げられます。
+
+- `ocr-templates/difficulty/NORMAL.png`
+- `ocr-templates/difficulty/HARD.png`
+- `ocr-templates/difficulty/MAXIMUM.png`
+- `ocr-templates/difficulty/SC.png`
+
+※ テンプレートが存在しない場合は自動でOCR判定へフォールバックします。
+
 ### OCRレイアウトの管理者調整
 
 管理者ページに「OCRレイアウト調整」機能があります。

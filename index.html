@@ -69,11 +69,8 @@
 
         <div class="ocr-import">
           <p class="picker-label">リザルト画像から自動入力 (ベータ)</p>
-          <label>画像ファイル
-            <input id="result-image-input" type="file" accept="image/*">
-          </label>
-          <p class="small muted">または、この画面でリザルト画像をクリップボードから貼り付け (Ctrl+V) できます。</p>
-          <button id="result-image-parse" type="button" class="secondary">画像から曲名/ボタン数/スコアを読み取る</button>
+          <input id="result-image-input" type="file" accept="image/*" hidden>
+          <p class="small muted">この機能は 1920x1080 の画像のみ対応です。リザルト画像をクリップボードから貼り付け (Ctrl+V) してください。</p>
           <div id="ocr-song-candidates" class="ocr-song-candidates" aria-live="polite"></div>
           <p id="ocr-message" class="muted small" aria-live="polite"></p>
           <details id="ocr-debug-panel" class="ocr-debug-panel">
@@ -188,6 +185,7 @@
 
   <script src="config.js"></script>
   <script src="common.js"></script>
+  <script src="ocr-templates/difficulty-data.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="pwa-register.js"></script>
   <script src="app.js"></script>
