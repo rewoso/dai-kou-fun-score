@@ -269,6 +269,1097 @@ function getDifficultyButtonClass(value) {
   }
 }
 
+function clamp01(value) {
+  return Math.max(0, Math.min(1, value));
+}
+
+function createCanvas(width, height) {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(width));
+  canvas.height = Math.max(1, Math.round(height));
+  return canvas;
+}
+
+const OCR_SUPPORTED_WIDTH = 1920;
+const OCR_SUPPORTED_HEIGHT = 1080;
+const OCR_SUPPORTED_ASPECT_RATIO = OCR_SUPPORTED_WIDTH / OCR_SUPPORTED_HEIGHT;
+const OCR_SUPPORTED_ASPECT_RATIO_TOLERANCE = 0.02;
+
+const DIFFICULTY_TEMPLATE_DEFS = [
+  {
+    difficulty: "NORMAL",
+    src: window.DIFFICULTY_TEMPLATE_DATA_URLS?.NORMAL || "ocr-templates/difficulty/NORMAL.png"
+  },
+  {
+    difficulty: "HARD",
+    src: window.DIFFICULTY_TEMPLATE_DATA_URLS?.HARD || "ocr-templates/difficulty/HARD.png"
+  },
+  {
+    difficulty: "MAXIMUM",
+    src: window.DIFFICULTY_TEMPLATE_DATA_URLS?.MAXIMUM || "ocr-templates/difficulty/MAXIMUM.png"
+  },
+  {
+    difficulty: "SC",
+    src: window.DIFFICULTY_TEMPLATE_DATA_URLS?.SC || "ocr-templates/difficulty/SC.png"
+  }
+];
+
+const DIFFICULTY_TEMPLATE_SIZE = { width: 180, height: 60 };
+const DIFFICULTY_TEMPLATE_MATCH_THRESHOLD = 0.24;
+let difficultyTemplateCachePromise = null;
+let difficultyTemplateDiagnostics = {
+  loaded: [],
+  failed: []
+};
+
+function normalizeSongKey(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+function normalizeOcrTypos(text) {
+  return String(text || "")
+    .replace(/[|]/g, "I")
+    .replace(/[“”]/g, "\"")
+    .replace(/[‘’]/g, "'")
+    .replace(/\$C/gi, "SC")
+    .replace(/5C/gi, "SC")
+    .replace(/S\s*C/gi, "SC")
+    .replace(/M4X/gi, "MAX")
+    .replace(/\bAXIMUM\b/gi, "MAXIMUM")
+    .replace(/\bMAXI[MN]U[MN]\b/gi, "MAXIMUM")
+    .replace(/MAX1MUM/gi, "MAXIMUM")
+    .replace(/N0R/gi, "NOR");
+}
+
+function toBigrams(value) {
+  if (value.length < 2) {
+    return [value];
+  }
+
+  const out = [];
+  for (let index = 0; index < value.length - 1; index += 1) {
+    out.push(value.slice(index, index + 2));
+  }
+  return out;
+}
+
+function diceCoefficient(left, right) {
+  if (!left || !right) {
+    return 0;
+  }
+
+  if (left === right) {
+    return 1;
+  }
+
+  const leftBigrams = toBigrams(left);
+  const rightBigrams = toBigrams(right);
+  const rightCounts = new Map();
+
+  for (const token of rightBigrams) {
+    rightCounts.set(token, (rightCounts.get(token) || 0) + 1);
+  }
+
+  let overlap = 0;
+  for (const token of leftBigrams) {
+    const count = rightCounts.get(token) || 0;
+    if (count > 0) {
+      overlap += 1;
+      rightCounts.set(token, count - 1);
+    }
+  }
+
+  return (2 * overlap) / (leftBigrams.length + rightBigrams.length);
+}
+
+function findTopSongMatches(rawSongText, songs, limit = 3) {
+  const blockedLine = /^(button|tunes|score|record|break|combo|clear|point|season|class|play|judge|details|dj\s*class|play\s*point|clear\s*point|new\s*record)$/i;
+  const lineCandidates = normalizeOcrTypos(rawSongText)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length >= 3)
+    .filter((line) => !blockedLine.test(line.toLowerCase()))
+    .filter((line) => !/^\d+[\d.,%\s-]*$/.test(line));
+
+  const expandedCandidates = [];
+  for (let index = 0; index < lineCandidates.length; index += 1) {
+    expandedCandidates.push(lineCandidates[index]);
+    if (lineCandidates[index + 1]) {
+      expandedCandidates.push(`${lineCandidates[index]} ${lineCandidates[index + 1]}`);
+    }
+  }
+
+  const candidates = expandedCandidates.length > 0
+    ? expandedCandidates
+    : [normalizeOcrTypos(rawSongText).trim()].filter(Boolean);
+
+  const bestBySong = new Map();
+
+  for (const candidate of candidates) {
+    const normalizedCandidate = normalizeSongKey(candidate);
+    if (!normalizedCandidate) {
+      continue;
+    }
+
+    for (const song of songs) {
+      const normalizedSong = normalizeSongKey(song);
+      if (!normalizedSong) {
+        continue;
+      }
+
+      let score = diceCoefficient(normalizedCandidate, normalizedSong);
+
+      if (normalizedSong.includes(normalizedCandidate) || normalizedCandidate.includes(normalizedSong)) {
+        score = Math.max(score, 0.9);
+      }
+
+      const previous = bestBySong.get(song);
+      if (!previous || score > previous.confidence) {
+        bestBySong.set(song, {
+          song,
+          confidence: score,
+          source: candidate
+        });
+      }
+    }
+  }
+
+  return [...bestBySong.values()]
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, Math.max(1, Math.floor(limit)));
+}
+
+function extractButtonFromText(text) {
+  const normalizedText = String(text || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s]/g, " ")
+    .replace(/\s+/g, " ");
+
+  const match = normalizedText.match(/([4568])\s*(?:B|BUTTON|BUTON|TUNES)/i);
+  if (!match) {
+    return "";
+  }
+
+  return `${match[1]}B`;
+}
+
+function extractScoreFromText(text) {
+  const tokens = String(text || "")
+    .replace(/,/g, "")
+    .split(/[^0-9]+/)
+    .filter((token) => token.length >= 4 && token.length <= 7);
+  const candidates = tokens
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value) && value >= 10000 && value <= 1000000)
+    .sort((a, b) => b - a);
+
+  if (candidates.length > 0) {
+    return candidates[0];
+  }
+
+  return 0;
+}
+
+function extractDifficultyFromText(text, availableDifficulties = []) {
+  const normalizedText = normalizeOcrTypos(text)
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s]/g, " ")
+    .replace(/\s+/g, " ");
+  const compactText = normalizedText.replace(/\s+/g, "");
+
+  const found = [];
+
+  if (/\bSC\b/.test(normalizedText) || /[SC$5]{2,}/.test(compactText)) {
+    found.push("SC");
+  }
+
+  if (
+    /\bMAX(?:IMUM)?\b/.test(normalizedText) ||
+    /\bAXIMUM\b/.test(normalizedText) ||
+    /M4X(?:IMUM)?/.test(compactText) ||
+    /(?:MAXIMUM|AXIMUM|MAXIMU|MAXIM)/.test(compactText)
+  ) {
+    found.push("MAXIMUM");
+  }
+
+  if (/\bHARD\b/.test(normalizedText) || /H4RD/.test(compactText) || /HAR[D0]/.test(compactText)) {
+    found.push("HARD");
+  }
+
+  if (/\bNOR(?:MAL|MAL)?\b/.test(normalizedText) || /N0RMAL/.test(compactText) || /NORMAL/.test(compactText)) {
+    found.push("NORMAL");
+  }
+
+  if (availableDifficulties.length === 0) {
+    return found[0] || "";
+  }
+
+  const matched = found.find((value) => availableDifficulties.includes(value));
+  if (matched) {
+    return matched;
+  }
+
+  if (availableDifficulties.includes("SC") && /\b[SC]{1,2}\b/.test(normalizedText)) {
+    return "SC";
+  }
+
+  return "";
+}
+
+async function imageFileToCanvas(file) {
+  if (!(file instanceof File)) {
+    throw new Error("画像ファイルが選択されていません。");
+  }
+
+  const imageUrl = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.decoding = "async";
+    image.src = imageUrl;
+
+    await new Promise((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error("画像の読み込みに失敗しました。"));
+    });
+
+    const canvas = createCanvas(image.naturalWidth, image.naturalHeight);
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("Canvas コンテキストを取得できませんでした。");
+    }
+
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return canvas;
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
+}
+
+async function getImageDimensions(file) {
+  if (!(file instanceof File)) {
+    throw new Error("画像ファイルが選択されていません。");
+  }
+
+  const imageUrl = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.decoding = "async";
+    image.src = imageUrl;
+
+    await new Promise((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error("画像の読み込みに失敗しました。"));
+    });
+
+    return {
+      width: image.naturalWidth,
+      height: image.naturalHeight
+    };
+  } finally {
+    URL.revokeObjectURL(imageUrl);
+  }
+}
+
+function isSupportedOcrImageSize(width, height) {
+  const safeWidth = Number(width) || 0;
+  const safeHeight = Number(height) || 0;
+  if (safeWidth < OCR_SUPPORTED_WIDTH || safeHeight < OCR_SUPPORTED_HEIGHT) {
+    return false;
+  }
+
+  const aspectRatio = safeWidth / safeHeight;
+  return Math.abs(aspectRatio - OCR_SUPPORTED_ASPECT_RATIO) <= OCR_SUPPORTED_ASPECT_RATIO_TOLERANCE;
+}
+
+function normalizeOcrSourceCanvas(canvas) {
+  if (!canvas || canvas.width === OCR_SUPPORTED_WIDTH && canvas.height === OCR_SUPPORTED_HEIGHT) {
+    return canvas;
+  }
+
+  const normalized = createCanvas(OCR_SUPPORTED_WIDTH, OCR_SUPPORTED_HEIGHT);
+  const context = normalized.getContext("2d");
+  if (!context) {
+    return canvas;
+  }
+
+  context.imageSmoothingEnabled = true;
+  context.drawImage(canvas, 0, 0, OCR_SUPPORTED_WIDTH, OCR_SUPPORTED_HEIGHT);
+  return normalized;
+}
+
+async function loadImageFromPath(src) {
+  const normalizedSrc = String(src || "").replace(/\\/g, "/");
+  const isFileProtocol = window.location?.protocol === "file:";
+  const candidates = [...new Set([
+    normalizedSrc,
+    `./${normalizedSrc}`,
+    new URL(normalizedSrc, window.location.href).href,
+    new URL(`./${normalizedSrc}`, window.location.href).href
+  ])];
+
+  let lastError = null;
+
+  for (const candidate of candidates) {
+    try {
+      const loaded = await new Promise((resolve, reject) => {
+        const image = new Image();
+        image.decoding = "async";
+        if (!isFileProtocol) {
+          image.crossOrigin = "anonymous";
+        }
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error(`load failed: ${candidate}`));
+        image.src = candidate;
+      });
+
+      return {
+        image: loaded,
+        usedPath: candidate,
+        tried: candidates
+      };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw new Error(`テンプレート画像を読み込めません: ${normalizedSrc} (${lastError instanceof Error ? lastError.message : "unknown"})`);
+}
+
+async function loadImageFromBlobUrl(blobUrl) {
+  return await new Promise((resolve, reject) => {
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error(`blob image load failed: ${blobUrl}`));
+    image.src = blobUrl;
+  });
+}
+
+function toNormalizedGrayVector(canvas, width = DIFFICULTY_TEMPLATE_SIZE.width, height = DIFFICULTY_TEMPLATE_SIZE.height) {
+  const resized = createCanvas(width, height);
+  const context = resized.getContext("2d", { willReadFrequently: true });
+  if (!context) {
+    return [];
+  }
+
+  context.drawImage(canvas, 0, 0, width, height);
+  const imageData = context.getImageData(0, 0, width, height);
+  const pixels = imageData.data;
+  const vector = new Array(width * height);
+
+  let sum = 0;
+  for (let index = 0, out = 0; index < pixels.length; index += 4, out += 1) {
+    const gray = pixels[index] * 0.299 + pixels[index + 1] * 0.587 + pixels[index + 2] * 0.114;
+    vector[out] = gray;
+    sum += gray;
+  }
+
+  const mean = sum / vector.length;
+  let norm = 0;
+  for (let index = 0; index < vector.length; index += 1) {
+    const centered = vector[index] - mean;
+    vector[index] = centered;
+    norm += centered * centered;
+  }
+
+  const safeNorm = Math.sqrt(norm) || 1;
+  for (let index = 0; index < vector.length; index += 1) {
+    vector[index] /= safeNorm;
+  }
+
+  return vector;
+}
+
+function buildDifficultyMatchVariants(canvas) {
+  const variants = [canvas];
+  const enhanced = upscaleAndEnhance(canvas, 2.8);
+
+  variants.push(enhanced);
+  variants.push(invertCanvas(canvas));
+  variants.push(invertCanvas(enhanced));
+
+  return variants;
+}
+
+function cosineSimilarity(left, right) {
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length === 0 || left.length !== right.length) {
+    return -1;
+  }
+
+  let dot = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    dot += left[index] * right[index];
+  }
+  return dot;
+}
+
+async function loadDifficultyTemplates() {
+  if (difficultyTemplateCachePromise) {
+    return difficultyTemplateCachePromise;
+  }
+
+  difficultyTemplateCachePromise = (async () => {
+    const loaded = [];
+    const failed = [];
+
+    for (const templateDef of DIFFICULTY_TEMPLATE_DEFS) {
+      try {
+        const loadedImage = await loadImageFromPath(templateDef.src);
+        const image = loadedImage.image;
+        const canvas = createCanvas(image.naturalWidth, image.naturalHeight);
+        const context = canvas.getContext("2d");
+        if (!context) {
+          throw new Error("template canvas context unavailable");
+        }
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        const vector = toNormalizedGrayVector(canvas);
+        loaded.push({
+          difficulty: templateDef.difficulty,
+          src: templateDef.src,
+          usedPath: loadedImage.usedPath,
+          vector
+        });
+      } catch (error) {
+        failed.push({
+          difficulty: templateDef.difficulty,
+          src: templateDef.src,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+
+    difficultyTemplateDiagnostics = {
+      loaded: loaded.map((item) => ({
+        difficulty: item.difficulty,
+        src: item.src,
+        usedPath: item.usedPath
+      })),
+      failed
+    };
+
+    return loaded;
+  })();
+
+  return difficultyTemplateCachePromise;
+}
+
+function getDifficultySweepRegions(songRegion, difficultyRegion) {
+  const sweepRegions = [];
+  const baseDifficultyRegion = expandRegion(difficultyRegion, 0.02, 0.03);
+  sweepRegions.push(baseDifficultyRegion);
+  sweepRegions.push(offsetRegion(baseDifficultyRegion, -0.02, 0));
+  sweepRegions.push(offsetRegion(baseDifficultyRegion, 0.02, 0));
+  sweepRegions.push(offsetRegion(baseDifficultyRegion, 0, -0.015));
+  sweepRegions.push(offsetRegion(baseDifficultyRegion, 0, 0.015));
+
+  // Header band around the song title where difficulty badge often appears.
+  const song = songRegion;
+  sweepRegions.push(regionFromLTRB(
+    (song.x || 0) - 0.055,
+    (song.y || 0) + 0.042,
+    (song.x || 0) + 0.17,
+    (song.y || 0) + 0.122
+  ));
+  sweepRegions.push(regionFromLTRB(
+    (song.x || 0) - 0.02,
+    (song.y || 0) + 0.05,
+    (song.x || 0) + 0.2,
+    (song.y || 0) + 0.14
+  ));
+
+  return sweepRegions;
+}
+
+async function matchDifficultyByTemplates(sourceCanvas, regions, availableDifficulties, onStatus) {
+  const templates = await loadDifficultyTemplates();
+  if (!templates || templates.length === 0) {
+    return {
+      difficulty: "",
+      score: -1,
+      regionIndex: -1,
+      considered: []
+    };
+  }
+
+  const filteredTemplates = templates.filter((template) => availableDifficulties.includes(template.difficulty));
+  if (filteredTemplates.length === 0) {
+    return {
+      difficulty: "",
+      score: -1,
+      regionIndex: -1,
+      considered: []
+    };
+  }
+
+  const sweepRegions = getDifficultySweepRegions(regions.song, regions.difficulty);
+  let best = {
+    difficulty: "",
+    score: -1,
+    regionIndex: -1,
+    considered: []
+  };
+
+  for (let index = 0; index < sweepRegions.length; index += 1) {
+    const region = sweepRegions[index];
+    const regionCanvas = cropCanvasRegion(sourceCanvas, region);
+    const variants = buildDifficultyMatchVariants(regionCanvas);
+
+    for (const template of filteredTemplates) {
+      let bestVariantScore = -1;
+
+      for (const variant of variants) {
+        const inputVector = toNormalizedGrayVector(variant);
+        const score = cosineSimilarity(inputVector, template.vector);
+        if (score > bestVariantScore) {
+          bestVariantScore = score;
+        }
+      }
+
+      best.considered.push({
+        regionIndex: index,
+        difficulty: template.difficulty,
+        score: bestVariantScore
+      });
+      if (bestVariantScore > best.score) {
+        best = {
+          ...best,
+          difficulty: template.difficulty,
+          score: bestVariantScore,
+          regionIndex: index
+        };
+      }
+    }
+
+    if (typeof onStatus === "function") {
+      onStatus(`難易度テンプレート比較中 (${index + 1}/${sweepRegions.length})`);
+    }
+  }
+
+  if (best.score >= DIFFICULTY_TEMPLATE_MATCH_THRESHOLD) {
+    return best;
+  }
+
+  return {
+    ...best,
+    difficulty: ""
+  };
+}
+
+function setFileToInput(input, file) {
+  if (!input || !(file instanceof File)) {
+    return;
+  }
+
+  try {
+    const transfer = new DataTransfer();
+    transfer.items.add(file);
+    input.files = transfer.files;
+  } catch {
+    // Some browsers may not allow programmatic FileList updates.
+  }
+}
+
+function extractImageFileFromClipboard(event) {
+  const items = event?.clipboardData?.items;
+  if (!items) {
+    return null;
+  }
+
+  for (const item of items) {
+    if (item.kind === "file" && item.type.startsWith("image/")) {
+      const blob = item.getAsFile();
+      if (blob) {
+        const extension = (blob.type.split("/")[1] || "png").replace(/[^a-z0-9]/gi, "");
+        return new File([blob], `clipboard-${Date.now()}.${extension || "png"}`, {
+          type: blob.type || "image/png"
+        });
+      }
+    }
+  }
+
+  return null;
+}
+
+async function extractImageFileFromSystemClipboard() {
+  if (!navigator.clipboard?.read) {
+    throw new Error("このブラウザではクリップボード画像の読み取りに対応していません。");
+  }
+
+  const items = await navigator.clipboard.read();
+  for (const item of items) {
+    for (const type of item.types || []) {
+      if (!String(type).startsWith("image/")) {
+        continue;
+      }
+
+      const blob = await item.getType(type);
+      if (blob) {
+        const extension = (blob.type.split("/")[1] || "png").replace(/[^a-z0-9]/gi, "");
+        return new File([blob], `clipboard-${Date.now()}.${extension || "png"}`, {
+          type: blob.type || "image/png"
+        });
+      }
+    }
+  }
+
+  return null;
+}
+
+function cropCanvasRegion(canvas, region) {
+  const startX = Math.floor(clamp01(region.x) * canvas.width);
+  const startY = Math.floor(clamp01(region.y) * canvas.height);
+  const endX = Math.ceil(clamp01(region.x + region.w) * canvas.width);
+  const endY = Math.ceil(clamp01(region.y + region.h) * canvas.height);
+
+  const width = Math.max(1, endX - startX);
+  const height = Math.max(1, endY - startY);
+
+  const out = createCanvas(width, height);
+  const context = out.getContext("2d");
+  if (!context) {
+    return out;
+  }
+
+  context.drawImage(canvas, startX, startY, width, height, 0, 0, width, height);
+  return out;
+}
+
+function expandRegion(region, expandX = 0.015, expandY = 0.02) {
+  const x = clamp01((Number(region?.x) || 0) - expandX);
+  const y = clamp01((Number(region?.y) || 0) - expandY);
+  const right = clamp01((Number(region?.x) || 0) + (Number(region?.w) || 0) + expandX);
+  const bottom = clamp01((Number(region?.y) || 0) + (Number(region?.h) || 0) + expandY);
+  return {
+    x,
+    y,
+    w: Math.max(0.01, right - x),
+    h: Math.max(0.01, bottom - y)
+  };
+}
+
+function offsetRegion(region, deltaX = 0, deltaY = 0) {
+  const source = region || { x: 0, y: 0, w: 0.1, h: 0.1 };
+  const x = clamp01((Number(source.x) || 0) + deltaX);
+  const y = clamp01((Number(source.y) || 0) + deltaY);
+  const w = Math.max(0.01, Math.min(Number(source.w) || 0.1, 1 - x));
+  const h = Math.max(0.01, Math.min(Number(source.h) || 0.1, 1 - y));
+  return { x, y, w, h };
+}
+
+function regionFromLTRB(left, top, right, bottom) {
+  const x = clamp01(left);
+  const y = clamp01(top);
+  const safeRight = clamp01(right);
+  const safeBottom = clamp01(bottom);
+  return {
+    x,
+    y,
+    w: Math.max(0.01, safeRight - x),
+    h: Math.max(0.01, safeBottom - y)
+  };
+}
+
+function upscaleAndEnhance(canvas, scale = 2.2) {
+  const out = createCanvas(canvas.width * scale, canvas.height * scale);
+  const context = out.getContext("2d", { willReadFrequently: true });
+  if (!context) {
+    return canvas;
+  }
+
+  context.imageSmoothingEnabled = true;
+  context.drawImage(canvas, 0, 0, out.width, out.height);
+
+  const imageData = context.getImageData(0, 0, out.width, out.height);
+  const pixels = imageData.data;
+
+  for (let index = 0; index < pixels.length; index += 4) {
+    const gray = pixels[index] * 0.299 + pixels[index + 1] * 0.587 + pixels[index + 2] * 0.114;
+    const contrasted = (gray - 128) * 1.6 + 128;
+    const clipped = Math.max(0, Math.min(255, contrasted));
+
+    pixels[index] = clipped;
+    pixels[index + 1] = clipped;
+    pixels[index + 2] = clipped;
+  }
+
+  context.putImageData(imageData, 0, 0);
+  return out;
+}
+
+function invertCanvas(canvas) {
+  const out = createCanvas(canvas.width, canvas.height);
+  const context = out.getContext("2d", { willReadFrequently: true });
+  if (!context) {
+    return canvas;
+  }
+
+  context.drawImage(canvas, 0, 0, out.width, out.height);
+  const imageData = context.getImageData(0, 0, out.width, out.height);
+  const pixels = imageData.data;
+
+  for (let index = 0; index < pixels.length; index += 4) {
+    pixels[index] = 255 - pixels[index];
+    pixels[index + 1] = 255 - pixels[index + 1];
+    pixels[index + 2] = 255 - pixels[index + 2];
+  }
+
+  context.putImageData(imageData, 0, 0);
+  return out;
+}
+
+async function recognizeCanvasText(canvas, options = {}, onProgress) {
+  const ocr = window.Tesseract;
+  if (!ocr || typeof ocr.recognize !== "function") {
+    throw new Error("OCRライブラリの読み込みに失敗しました。ページを再読み込みしてください。");
+  }
+
+  const result = await ocr.recognize(canvas, "eng", {
+    ...options,
+    logger: (message) => {
+      if (typeof onProgress !== "function") {
+        return;
+      }
+
+      if (message.status === "recognizing text" && Number.isFinite(message.progress)) {
+        onProgress(`${Math.round(message.progress * 100)}%`);
+      }
+    }
+  });
+
+  return String(result?.data?.text || "");
+}
+
+function pickOcrPresetForImage(config, width, height) {
+  const normalized = normalizeOcrLayoutConfig(config);
+  const targetRatio = Number(width) > 0 && Number(height) > 0 ? Number(width) / Number(height) : 16 / 9;
+
+  const active = normalized.presets.find((preset) => preset.id === normalized.activePresetId);
+  if (active && Number.isFinite(active.aspectRatio) && Math.abs(active.aspectRatio - targetRatio) <= 0.06) {
+    return active;
+  }
+
+  return [...normalized.presets].sort((a, b) => {
+    const diffA = Math.abs((Number(a.aspectRatio) || 0) - targetRatio);
+    const diffB = Math.abs((Number(b.aspectRatio) || 0) - targetRatio);
+    return diffA - diffB;
+  })[0] || getActiveOcrLayoutPreset(normalized);
+}
+
+async function parseResultImage(file, catalog, onStatus) {
+  const sourceCanvas = normalizeOcrSourceCanvas(await imageFileToCanvas(file));
+  const songNames = getSongNames(catalog);
+  const layoutConfig = loadOcrLayoutConfig();
+  const preset = pickOcrPresetForImage(layoutConfig, sourceCanvas.width, sourceCanvas.height);
+  const regions = preset.regions;
+
+  if (typeof onStatus === "function") {
+    onStatus(`画像を解析しています... (preset: ${preset.label})`);
+  }
+
+  const buttonText = await recognizeCanvasText(
+    upscaleAndEnhance(cropCanvasRegion(sourceCanvas, regions.button), 2.5),
+    { tessedit_char_whitelist: "4568BUTTONTUNES " },
+    (progress) => {
+      if (typeof onStatus === "function") {
+        onStatus(`ボタン数を解析中 (${progress})`);
+      }
+    }
+  );
+
+  const scoreText = await recognizeCanvasText(
+    upscaleAndEnhance(cropCanvasRegion(sourceCanvas, regions.score), 2.6),
+    { tessedit_char_whitelist: "SCORE0123456789 " },
+    (progress) => {
+      if (typeof onStatus === "function") {
+        onStatus(`スコアを解析中 (${progress})`);
+      }
+    }
+  );
+
+  const difficultyText = await recognizeCanvasText(
+    upscaleAndEnhance(cropCanvasRegion(sourceCanvas, regions.difficulty), 2.4),
+    { tessedit_char_whitelist: "SCNORMALHARDMAXIMUM " },
+    (progress) => {
+      if (typeof onStatus === "function") {
+        onStatus(`難易度を解析中 (${progress})`);
+      }
+    }
+  );
+
+  const songText = await recognizeCanvasText(
+    upscaleAndEnhance(cropCanvasRegion(sourceCanvas, regions.song), 2.0),
+    {},
+    (progress) => {
+      if (typeof onStatus === "function") {
+        onStatus(`曲名を解析中 (${progress})`);
+      }
+    }
+  );
+
+  let resolvedSongText = songText;
+  let songCandidates = findTopSongMatches(songText, songNames, 3);
+
+  if (!songCandidates[0] || songCandidates[0].confidence < 0.35) {
+    const fallbackSongText = await recognizeCanvasText(
+      upscaleAndEnhance(cropCanvasRegion(sourceCanvas, expandRegion(regions.song, 0.02, 0.025)), 2.3),
+      {},
+      (progress) => {
+        if (typeof onStatus === "function") {
+          onStatus(`曲名を再解析中 (${progress})`);
+        }
+      }
+    );
+
+    const fallbackSongCandidates = findTopSongMatches(fallbackSongText, songNames, 3);
+    if (fallbackSongCandidates[0] && fallbackSongCandidates[0].confidence >= (songCandidates[0]?.confidence || 0)) {
+      resolvedSongText = fallbackSongText;
+      songCandidates = fallbackSongCandidates;
+    }
+  }
+
+  const button = extractButtonFromText(buttonText);
+  let mergedScoreText = scoreText;
+  let score = extractScoreFromText(mergedScoreText);
+
+  if (score > 0 && score < 100000) {
+    const retryScoreText = await recognizeCanvasText(
+      upscaleAndEnhance(cropCanvasRegion(sourceCanvas, expandRegion(regions.score, 0.01, 0.02)), 3.0),
+      {
+        tessedit_char_whitelist: "SCORE0123456789 ",
+        tessedit_pageseg_mode: "7"
+      },
+      (progress) => {
+        if (typeof onStatus === "function") {
+          onStatus(`スコアを再解析中 (${progress})`);
+        }
+      }
+    );
+
+    const retryScoreTextInverted = await recognizeCanvasText(
+      invertCanvas(upscaleAndEnhance(cropCanvasRegion(sourceCanvas, expandRegion(regions.score, 0.01, 0.02)), 3.0)),
+      {
+        tessedit_char_whitelist: "SCORE0123456789 ",
+        tessedit_pageseg_mode: "7"
+      },
+      (progress) => {
+        if (typeof onStatus === "function") {
+          onStatus(`スコアを再解析中(反転) (${progress})`);
+        }
+      }
+    );
+
+    mergedScoreText = `${mergedScoreText}\n${retryScoreText}\n${retryScoreTextInverted}`.trim();
+    const retriedScore = extractScoreFromText(mergedScoreText);
+    if (retriedScore > score) {
+      score = retriedScore;
+    }
+  }
+  const bestSongMatch = songCandidates[0] || { song: "", confidence: 0, source: "" };
+  const preferredSong = bestSongMatch.confidence >= 0.35 ? bestSongMatch.song : "";
+  const availableDifficulties = preferredSong && button
+    ? getDifficultiesForSong(catalog, preferredSong, button)
+    : (catalog.difficulties || []);
+
+  const templateMatch = await matchDifficultyByTemplates(
+    sourceCanvas,
+    regions,
+    availableDifficulties,
+    onStatus
+  );
+
+  // Difficulty should be read from dedicated region only.
+  // Mixing song text causes false positives for titles containing "MAX".
+  let mergedDifficultyText = difficultyText;
+  let difficultySource = templateMatch.difficulty ? "template" : "ocr";
+  let difficulty = templateMatch.difficulty || extractDifficultyFromText(mergedDifficultyText, availableDifficulties);
+
+  if (!difficulty) {
+    const fallbackDifficultyText = await recognizeCanvasText(
+      upscaleAndEnhance(cropCanvasRegion(sourceCanvas, expandRegion(regions.difficulty, 0.012, 0.02)), 2.8),
+      { tessedit_char_whitelist: "SCNORMALHARDMAXIMUM$5C " },
+      (progress) => {
+        if (typeof onStatus === "function") {
+          onStatus(`難易度を再解析中 (${progress})`);
+        }
+      }
+    );
+
+    mergedDifficultyText = `${mergedDifficultyText}\n${fallbackDifficultyText}`.trim();
+    difficulty = extractDifficultyFromText(mergedDifficultyText, availableDifficulties);
+    if (difficulty) {
+      difficultySource = "ocr";
+    }
+  }
+
+  if (!difficulty) {
+    const expandedDifficultyCanvas = upscaleAndEnhance(
+      cropCanvasRegion(sourceCanvas, expandRegion(regions.difficulty, 0.02, 0.028)),
+      3.0
+    );
+
+    const keywordDifficultyText = await recognizeCanvasText(
+      expandedDifficultyCanvas,
+      {
+        tessedit_char_whitelist: "SCNORMALHARDMAXIMUM$5C ",
+        tessedit_pageseg_mode: "7"
+      },
+      (progress) => {
+        if (typeof onStatus === "function") {
+          onStatus(`難易度キーワードを再解析中 (${progress})`);
+        }
+      }
+    );
+
+    const keywordDifficultyTextInverted = await recognizeCanvasText(
+      invertCanvas(expandedDifficultyCanvas),
+      {
+        tessedit_char_whitelist: "SCNORMALHARDMAXIMUM$5C ",
+        tessedit_pageseg_mode: "7"
+      },
+      (progress) => {
+        if (typeof onStatus === "function") {
+          onStatus(`難易度キーワード(反転)を再解析中 (${progress})`);
+        }
+      }
+    );
+
+    mergedDifficultyText = `${mergedDifficultyText}\n${keywordDifficultyText}\n${keywordDifficultyTextInverted}`.trim();
+    difficulty = extractDifficultyFromText(mergedDifficultyText, availableDifficulties);
+    if (difficulty) {
+      difficultySource = "ocr";
+    }
+  }
+
+  if (!difficulty) {
+    const scProbeText = await recognizeCanvasText(
+      upscaleAndEnhance(cropCanvasRegion(sourceCanvas, expandRegion(regions.difficulty, 0.018, 0.024)), 3.2),
+      {
+        tessedit_char_whitelist: "SC$5 ",
+        tessedit_pageseg_mode: "7"
+      },
+      (progress) => {
+        if (typeof onStatus === "function") {
+          onStatus(`難易度SCを再解析中 (${progress})`);
+        }
+      }
+    );
+
+    mergedDifficultyText = `${mergedDifficultyText}\n${scProbeText}`.trim();
+    if (availableDifficulties.includes("SC") && /[SC$5]{1,2}/i.test(normalizeOcrTypos(scProbeText))) {
+      difficulty = "SC";
+      difficultySource = "ocr";
+    }
+  }
+
+  if (!difficulty) {
+    const shiftedRegionTexts = [];
+    const baseDifficultyRegion = expandRegion(regions.difficulty, 0.02, 0.03);
+    const shiftCandidates = [
+      { dx: 0, dy: 0 },
+      { dx: -0.008, dy: 0 },
+      { dx: 0.008, dy: 0 },
+      { dx: 0, dy: -0.008 },
+      { dx: 0, dy: 0.008 }
+    ];
+
+    for (const shift of shiftCandidates) {
+      const shiftedText = await recognizeCanvasText(
+        upscaleAndEnhance(cropCanvasRegion(sourceCanvas, offsetRegion(baseDifficultyRegion, shift.dx, shift.dy)), 2.9),
+        {
+          tessedit_char_whitelist: "SCNORMALHARDMAXIMUM$5C ",
+          tessedit_pageseg_mode: "7"
+        }
+      );
+      shiftedRegionTexts.push(shiftedText);
+    }
+
+    mergedDifficultyText = `${mergedDifficultyText}\n${shiftedRegionTexts.join("\n")}`.trim();
+    difficulty = extractDifficultyFromText(mergedDifficultyText, availableDifficulties);
+  }
+
+  if (!difficulty && availableDifficulties.includes("MAXIMUM")) {
+    const normalizedDifficultyText = normalizeOcrTypos(mergedDifficultyText)
+      .toUpperCase()
+      .replace(/[^A-Z0-9\s]/g, " ")
+      .replace(/\s+/g, " ");
+
+    // MAXIMUM label is often misread as short MAX-like fragments.
+    if (/\bMAX(?:IMUM)?\b|\bM4X(?:IMUM)?\b|\bMXM\b|\bMAXIM\b/.test(normalizedDifficultyText)) {
+      difficulty = "MAXIMUM";
+    }
+  }
+
+  if (!difficulty) {
+    const sweepRegions = getDifficultySweepRegions(regions.song, regions.difficulty);
+    const sweepTexts = [];
+    for (let index = 0; index < sweepRegions.length; index += 1) {
+      const region = sweepRegions[index];
+      const sweepText = await recognizeCanvasText(
+        upscaleAndEnhance(cropCanvasRegion(sourceCanvas, region), 3.1),
+        {
+          tessedit_char_whitelist: "SCNORMALHARDMAXIMUM$5C ",
+          tessedit_pageseg_mode: "7"
+        },
+        (progress) => {
+          if (typeof onStatus === "function") {
+            onStatus(`難易度バッジ探索中 (${index + 1}/${sweepRegions.length}, ${progress})`);
+          }
+        }
+      );
+
+      sweepTexts.push(sweepText);
+      const sweepDetected = extractDifficultyFromText(sweepText, availableDifficulties);
+      if (sweepDetected) {
+        difficulty = sweepDetected;
+        break;
+      }
+    }
+
+    if (!difficulty) {
+      mergedDifficultyText = `${mergedDifficultyText}\n${sweepTexts.join("\n")}`.trim();
+      difficulty = extractDifficultyFromText(mergedDifficultyText, availableDifficulties);
+      if (difficulty) {
+        difficultySource = "ocr";
+      }
+    } else {
+      mergedDifficultyText = `${mergedDifficultyText}\n${sweepTexts.join("\n")}`.trim();
+    }
+  }
+
+  // If chart metadata already narrows down to one difficulty, prefer that over blank OCR.
+  if (!difficulty && availableDifficulties.length === 1) {
+    difficulty = availableDifficulties[0];
+    difficultySource = "metadata";
+  }
+
+  return {
+    presetId: preset.id,
+    presetLabel: preset.label,
+    button,
+    difficulty,
+    availableDifficulties,
+    score,
+    song: bestSongMatch.confidence >= 0.35 ? bestSongMatch.song : "",
+    songCandidates,
+    songConfidence: bestSongMatch.confidence,
+    rawSong: bestSongMatch.source || resolvedSongText.trim(),
+    rawButton: buttonText,
+    rawScore: mergedScoreText,
+    rawDifficulty: mergedDifficultyText,
+    difficultySource,
+    difficultyTemplateUsed: Boolean(templateMatch.difficulty),
+    difficultyTemplateAccepted: Boolean(templateMatch.difficulty && templateMatch.score >= DIFFICULTY_TEMPLATE_MATCH_THRESHOLD),
+    difficultyTemplateMatch: {
+      difficulty: templateMatch.difficulty || "",
+      score: templateMatch.score,
+      regionIndex: templateMatch.regionIndex
+    },
+    difficultyTemplateDiagnostics
+  };
+}
+
 function initRanking(catalog, recordsRef) {
   const userSelect = document.getElementById("filter-user");
   const userMultiToggle = document.getElementById("filter-user-multi");
@@ -495,6 +1586,10 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
   const songFilter = document.getElementById("song-filter");
   const entrySong = document.getElementById("entry-song");
   const scoreInput = document.getElementById("entry-score");
+  const resultImageInput = document.getElementById("result-image-input");
+  const resultImagePasteButton = document.getElementById("result-image-paste");
+  const ocrMessage = document.getElementById("ocr-message");
+  const ocrDebugOutput = document.getElementById("ocr-debug-output");
   const form = document.getElementById("user-score-form");
   const message = document.getElementById("entry-message");
   const existingScoreHint = document.getElementById("entry-existing-score");
@@ -605,6 +1700,225 @@ function initScoreEntry(catalog, recordsRef, rerenderRanking) {
   songFilter.addEventListener("input", refreshSongs);
   entrySong.addEventListener("change", refreshDifficultyButtons);
 
+  const setButtonValue = (value) => {
+    if (!value || !catalog.buttons.includes(value)) {
+      return false;
+    }
+
+    state.button = value;
+    rerenderButtons();
+    refreshDifficultyButtons();
+    return true;
+  };
+
+  const setSongValue = (value) => {
+    if (!value) {
+      return false;
+    }
+
+    const hasTargetSong = getSongNames(catalog).includes(value);
+    if (!hasTargetSong) {
+      return false;
+    }
+
+    const optionValues = Array.from(entrySong.options).map((option) => option.value);
+    if (!optionValues.includes(value)) {
+      songFilter.value = "";
+      refreshSongs();
+    }
+
+    entrySong.value = value;
+    refreshDifficultyButtons();
+    return true;
+  };
+
+  const setDifficultyValue = (value) => {
+    if (!value) {
+      return false;
+    }
+
+    const available = getDifficultiesForSong(catalog, entrySong.value, state.button);
+    if (!available.includes(value)) {
+      return false;
+    }
+
+    state.difficulty = value;
+    refreshDifficultyButtons();
+    return true;
+  };
+
+  const runOcrImport = async (file, sourceLabel = "ファイル") => {
+    if (!(file instanceof File)) {
+      if (ocrMessage) {
+        ocrMessage.textContent = "画像ファイルが見つかりません。";
+      }
+      return;
+    }
+
+    let dimensions;
+    try {
+      dimensions = await getImageDimensions(file);
+    } catch (error) {
+      if (ocrMessage) {
+        ocrMessage.textContent = `画像解析エラー: ${error instanceof Error ? error.message : "不明なエラー"}`;
+      }
+      return;
+    }
+
+    const isSupportedSize = isSupportedOcrImageSize(dimensions.width, dimensions.height);
+    if (!isSupportedSize) {
+      const sizeMessage = `${sourceLabel}画像サイズ ${dimensions.width}x${dimensions.height} は非対応です。${OCR_SUPPORTED_WIDTH}x${OCR_SUPPORTED_HEIGHT} 以上の16:9画像をコピーしてから貼り付けてください。`;
+      if (ocrMessage) {
+        ocrMessage.textContent = sizeMessage;
+      }
+      if (ocrDebugOutput) {
+        ocrDebugOutput.textContent = [
+          `preset: -`,
+          `button: 未検出`,
+          `difficulty_detected: 未検出`,
+          `difficulty_allowed: -`,
+          `score: 0`,
+          "",
+          `[size check]`,
+          `received: ${dimensions.width}x${dimensions.height}`,
+          `required: ${OCR_SUPPORTED_WIDTH}x${OCR_SUPPORTED_HEIGHT}`
+        ].join("\n");
+      }
+      return;
+    }
+
+    if (ocrMessage) {
+      ocrMessage.textContent = `${sourceLabel}画像を 1920x1080 に正規化して解析します...`;
+    }
+
+    if (resultImagePasteButton) {
+      resultImagePasteButton.disabled = true;
+    }
+
+    try {
+      const parsed = await parseResultImage(file, catalog, (status) => {
+        if (ocrMessage) {
+          ocrMessage.textContent = status;
+        }
+      });
+
+      if (ocrDebugOutput) {
+        const templateLoadedLines = (parsed.difficultyTemplateDiagnostics?.loaded || [])
+          .map((item) => `${item.difficulty}: ${item.usedPath || item.src}`)
+          .join("\n") || "-";
+        const templateFailedLines = (parsed.difficultyTemplateDiagnostics?.failed || [])
+          .map((item) => `${item.difficulty}: ${item.error}`)
+          .join("\n") || "-";
+
+        ocrDebugOutput.textContent = [
+          `preset: ${parsed.presetLabel || parsed.presetId || "-"}`,
+          `button: ${parsed.button || "未検出"}`,
+          `difficulty_detected: ${parsed.difficulty || "未検出"}`,
+          `difficulty_source: ${parsed.difficultySource || "-"}`,
+          `difficulty_template_used: ${parsed.difficultyTemplateUsed ? "yes" : "no"}`,
+          `difficulty_template_accepted: ${parsed.difficultyTemplateAccepted ? "yes" : "no"}`,
+          `difficulty_template_match: ${parsed.difficultyTemplateMatch?.difficulty || "-"} (${Number.isFinite(parsed.difficultyTemplateMatch?.score) ? parsed.difficultyTemplateMatch.score.toFixed(3) : "-"}) region=${Number.isFinite(parsed.difficultyTemplateMatch?.regionIndex) ? parsed.difficultyTemplateMatch.regionIndex : "-"}`,
+          `difficulty_allowed: ${(parsed.availableDifficulties || []).join(", ") || "-"}`,
+          `score: ${parsed.score || 0}`,
+          "",
+          "[template loaded]",
+          templateLoadedLines,
+          "",
+          "[template failed]",
+          templateFailedLines,
+          "",
+          "[raw difficulty OCR]",
+          parsed.rawDifficulty || "",
+          "",
+          "[raw song OCR]",
+          parsed.rawSong || "",
+          "",
+          "[raw button OCR]",
+          parsed.rawButton || "",
+          "",
+          "[raw score OCR]",
+          parsed.rawScore || ""
+        ].join("\n");
+      }
+
+      const applied = [];
+      const notes = [];
+
+      if (setSongValue(parsed.song)) {
+        applied.push(`曲名: ${parsed.song}`);
+      }
+
+      if (setButtonValue(parsed.button)) {
+        applied.push(`ボタン数: ${parsed.button}`);
+      }
+
+      const difficultyApplied = setDifficultyValue(parsed.difficulty);
+      if (difficultyApplied) {
+        applied.push(`難易度: ${parsed.difficulty}`);
+      } else if (parsed.difficulty) {
+        notes.push(`難易度候補: ${parsed.difficulty} (この曲/ボタンの候補外)`);
+      } else {
+        notes.push("難易度候補: 未検出");
+      }
+
+      if (Number.isFinite(parsed.score) && parsed.score > 0) {
+        scoreInput.value = String(parsed.score);
+        applied.push(`スコア: ${parsed.score.toLocaleString("ja-JP")}`);
+      }
+
+      if (ocrMessage) {
+        if (applied.length > 0) {
+          const suffix = notes.length > 0 ? ` / ${notes.join(" / ")}` : "";
+          ocrMessage.textContent = `${sourceLabel}から自動入力しました (${applied.join(" / ")}${suffix})`;
+        } else {
+          ocrMessage.textContent = `読み取りに失敗しました。画像を変えるか手入力で修正してください。${notes.length > 0 ? ` (${notes.join(" / ")})` : ""}`;
+        }
+      }
+    } catch (error) {
+      if (ocrMessage) {
+        ocrMessage.textContent = `画像解析エラー: ${error instanceof Error ? error.message : "不明なエラー"}`;
+      }
+    } finally {
+      if (resultImagePasteButton) {
+        resultImagePasteButton.disabled = false;
+      }
+    }
+  };
+
+  resultImagePasteButton?.addEventListener("click", async () => {
+    if (ocrMessage) {
+      ocrMessage.textContent = "クリップボード画像を読み取っています...";
+    }
+
+    try {
+      const file = await extractImageFileFromSystemClipboard();
+      if (!file) {
+        if (ocrMessage) {
+          ocrMessage.textContent = "クリップボードに画像がありません。画像をコピーしてから押してください。";
+        }
+        return;
+      }
+
+      setFileToInput(resultImageInput, file);
+      await runOcrImport(file, "クリップボード");
+    } catch (error) {
+      if (ocrMessage) {
+        ocrMessage.textContent = `クリップボード画像の読み取りに失敗しました。${error instanceof Error ? ` (${error.message})` : ""}`;
+      }
+    }
+  });
+
+  document.addEventListener("paste", async (event) => {
+    const pastedImageFile = extractImageFileFromClipboard(event);
+    if (!pastedImageFile) {
+      return;
+    }
+
+    event.preventDefault();
+    setFileToInput(resultImageInput, pastedImageFile);
+    await runOcrImport(pastedImageFile, "クリップボード");
+  });
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
 
@@ -685,6 +1999,14 @@ function showDaikoFun() {
 async function main() {
   await initPasswordGate();
 
+  if (isRemoteEnabled()) showLoading("OCRレイアウトを読み込み中...");
+  let ocrLayoutLoadResult;
+  try {
+    ocrLayoutLoadResult = await loadSharedOcrLayoutConfig();
+  } finally {
+    hideLoading();
+  }
+
   if (isRemoteEnabled()) showLoading("データを読み込み中...");
   let shared;
   try {
@@ -704,6 +2026,7 @@ async function main() {
 
   const count = document.getElementById("record-count");
   const message = document.getElementById("entry-message");
+  const ocrMessage = document.getElementById("ocr-message");
 
   if (shared.source === "local-fallback") {
     if (count) {
@@ -712,6 +2035,10 @@ async function main() {
     if (message) {
       message.textContent = "共有API接続失敗のためローカル保存モードです。";
     }
+  }
+
+  if (ocrLayoutLoadResult?.source === "local-fallback" && ocrMessage) {
+    ocrMessage.textContent = "共有OCRレイアウト取得に失敗したため、ローカル設定を使用します。";
   }
 
   const rerenderRanking = initRanking(catalog, recordsRef);

@@ -3,11 +3,12 @@
 
 const FILE_NAME = "djmax-ranking-data.json";
 const SONG_CATALOG_FILE_NAME = "djmax-song-catalog.json";
+const OCR_LAYOUT_FILE_NAME = "djmax-ocr-layout.json";
 const READ_TOKEN = "djmax-read-token";
 const WRITE_TOKEN = "djmax-write-token";
 // Optional: set folder ID to place JSON under Shared Drive folder.
 // Leave empty string to use My Drive root.
-const TARGET_FOLDER_ID = "";
+const TARGET_FOLDER_ID = "djmax-ranking-data";
 
 function defaultCatalog_() {
   return {
@@ -76,6 +77,85 @@ function normalizeRecords_(records) {
     .filter((r) => r.user && r.song && r.button && r.difficulty);
 }
 
+function defaultOcrLayout_() {
+  return {
+    activePresetId: "default-16-9",
+    presets: [
+      {
+        id: "default-16-9",
+        label: "Default 16:9",
+        aspectRatio: 16 / 9,
+        regions: {
+          button: { x: 0.01, y: 0.01, w: 0.24, h: 0.16 },
+          song: { x: 0.32, y: 0.0, w: 0.48, h: 0.14 },
+          difficulty: { x: 0.37, y: 0.03, w: 0.16, h: 0.12 },
+          score: { x: 0.35, y: 0.58, w: 0.32, h: 0.23 }
+        }
+      }
+    ]
+  };
+}
+
+function normalizeUnit_(value, fallback) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+  return Math.max(0, Math.min(1, numeric));
+}
+
+function normalizeRegion_(region, fallback) {
+  const source = region && typeof region === "object" ? region : {};
+  const base = fallback && typeof fallback === "object" ? fallback : { x: 0, y: 0, w: 0.1, h: 0.1 };
+  const x = normalizeUnit_(source.x, normalizeUnit_(base.x, 0));
+  const y = normalizeUnit_(source.y, normalizeUnit_(base.y, 0));
+  const w = Math.max(0.01, Math.min(normalizeUnit_(source.w, normalizeUnit_(base.w, 0.1)), 1 - x));
+  const h = Math.max(0.01, Math.min(normalizeUnit_(source.h, normalizeUnit_(base.h, 0.1)), 1 - y));
+  return { x: x, y: y, w: w, h: h };
+}
+
+function normalizeOcrLayout_(config) {
+  const source = config && typeof config === "object" ? config : {};
+  const fallback = defaultOcrLayout_();
+  const fallbackPreset = fallback.presets[0];
+  const keys = ["button", "song", "difficulty", "score"];
+  const rawPresets = Array.isArray(source.presets) ? source.presets : fallback.presets;
+
+  const presets = rawPresets
+    .map((preset, index) => {
+      if (!preset || typeof preset !== "object") {
+        return null;
+      }
+
+      const aspectRatio = Number(preset.aspectRatio);
+      const incomingRegions = preset.regions && typeof preset.regions === "object" ? preset.regions : {};
+
+      const regions = {};
+      for (let i = 0; i < keys.length; i += 1) {
+        const key = keys[i];
+        regions[key] = normalizeRegion_(incomingRegions[key], fallbackPreset.regions[key]);
+      }
+
+      return {
+        id: String(preset.id || `preset-${index + 1}`),
+        label: String(preset.label || `Preset ${index + 1}`),
+        aspectRatio: Number.isFinite(aspectRatio) && aspectRatio > 0 ? aspectRatio : fallbackPreset.aspectRatio,
+        regions: regions
+      };
+    })
+    .filter((preset) => preset !== null);
+
+  const safePresets = presets.length > 0 ? presets : fallback.presets;
+  const activePresetId = safePresets.some((preset) => preset.id === source.activePresetId)
+    ? source.activePresetId
+    : safePresets[0].id;
+
+  return {
+    activePresetId: activePresetId,
+    presets: safePresets
+  };
+}
+
 function normalizeState_(state) {
   const source = state && typeof state === "object" ? state : {};
   return {
@@ -112,6 +192,21 @@ function getOrCreateSongCatalogFile_() {
   }
 
   return DriveApp.createFile(SONG_CATALOG_FILE_NAME, JSON.stringify(initial));
+}
+
+function getOrCreateOcrLayoutFile_() {
+  const folder = getTargetFolder_();
+  const files = folder ? folder.getFilesByName(OCR_LAYOUT_FILE_NAME) : DriveApp.getFilesByName(OCR_LAYOUT_FILE_NAME);
+  if (files.hasNext()) {
+    return files.next();
+  }
+
+  const initial = normalizeOcrLayout_(defaultOcrLayout_());
+  if (folder) {
+    return folder.createFile(OCR_LAYOUT_FILE_NAME, JSON.stringify(initial));
+  }
+
+  return DriveApp.createFile(OCR_LAYOUT_FILE_NAME, JSON.stringify(initial));
 }
 
 function getTargetFolder_() {
@@ -158,6 +253,24 @@ function readSongCatalog_() {
 function writeSongCatalog_(catalog) {
   const file = getOrCreateSongCatalogFile_();
   const normalized = normalizeSongCatalog_(catalog);
+  file.setContent(JSON.stringify(normalized));
+  return normalized;
+}
+
+function readOcrLayout_() {
+  const file = getOrCreateOcrLayoutFile_();
+  const text = file.getBlob().getDataAsString("UTF-8");
+
+  try {
+    return normalizeOcrLayout_(JSON.parse(text));
+  } catch (_e) {
+    return normalizeOcrLayout_(defaultOcrLayout_());
+  }
+}
+
+function writeOcrLayout_(config) {
+  const file = getOrCreateOcrLayoutFile_();
+  const normalized = normalizeOcrLayout_(config);
   file.setContent(JSON.stringify(normalized));
   return normalized;
 }
@@ -219,6 +332,30 @@ function doPost(e) {
     try {
       const saved = writeSongCatalog_(body.catalog);
       return response_({ ok: true, catalog: saved });
+    } finally {
+      lock.releaseLock();
+    }
+  }
+
+  if (action === "getOcrLayout") {
+    if (body.token !== READ_TOKEN) {
+      return response_({ ok: false, error: "unauthorized_read" });
+    }
+
+    return response_({ ok: true, config: readOcrLayout_() });
+  }
+
+  if (action === "setOcrLayout") {
+    if (body.token !== WRITE_TOKEN) {
+      return response_({ ok: false, error: "unauthorized_write" });
+    }
+
+    const lock = LockService.getScriptLock();
+    lock.waitLock(30000);
+
+    try {
+      const saved = writeOcrLayout_(body.config);
+      return response_({ ok: true, config: saved });
     } finally {
       lock.releaseLock();
     }

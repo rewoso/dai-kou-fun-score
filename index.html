@@ -67,6 +67,16 @@
           <select id="entry-user" required></select>
         </label>
 
+        <div class="ocr-import">
+          <p class="picker-label">リザルト画像から自動入力 (ベータ)</p>
+          <input id="result-image-input" type="file" accept="image/*" hidden>
+          <div class="ocr-import-actions">
+            <button id="result-image-paste" type="button" class="secondary">クリップボードのリザルト画像を貼り付け</button>
+            <p class="small muted ocr-import-note">1920x1080 以上の16:9の画像のみ対応です。</p>
+          </div>
+          <p id="ocr-message" class="muted small" aria-live="polite"></p>
+        </div>
+
         <label>曲名フィルタ
           <input id="song-filter" type="text" placeholder="曲名を入力して絞り込み">
         </label>
@@ -173,6 +183,8 @@
 
   <script src="config.js"></script>
   <script src="common.js"></script>
+  <script src="ocr-templates/difficulty-data.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="pwa-register.js"></script>
   <script src="app.js"></script>
 </body>
