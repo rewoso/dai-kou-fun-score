@@ -75,7 +75,7 @@ const REMOTE_CONFIG = {
   writeToken: "djmax-write-token",
   // "state": use catalog from shared state file, "drive-file": use separate song catalog JSON.
   catalogMode: "drive-file",
-  timeoutMs: 10000
+  timeoutMs: 45000
 };
 
 if (window.DJMAX_REMOTE_CONFIG && typeof window.DJMAX_REMOTE_CONFIG === "object") {
@@ -491,6 +491,54 @@ async function remoteFetchJson(payload) {
   }
 }
 
+function formatRemoteError(error) {
+  if (!error) {
+    return "共有反映に失敗しました。";
+  }
+
+  const name = typeof error?.name === "string" ? error.name : "";
+  const message = typeof error?.message === "string" ? error.message : String(error);
+  const lower = message.toLowerCase();
+
+  if (name === "AbortError" || lower.includes("aborted") || lower.includes("timeout")) {
+    const seconds = Math.round(REMOTE_CONFIG.timeoutMs / 1000);
+    return `共有保存がタイムアウトしました（${seconds}秒）。時間をおいて再試行してください。`;
+  }
+
+  if (lower.includes("failed to fetch") || lower.includes("networkerror") || lower.includes("load failed")) {
+    return "ネットワークまたは共有APIに接続できませんでした。接続を確認して再試行してください。";
+  }
+
+  const httpMatch = message.match(/HTTP\s*(\d{3})/i);
+  if (httpMatch) {
+    return `共有API応答エラー（HTTP ${httpMatch[1]}）。`;
+  }
+
+  if (lower.includes("unauthorized")) {
+    return "共有APIの認証に失敗しました。トークン設定を確認してください。";
+  }
+
+  return message;
+}
+
+async function remoteFetchJsonWithRetry(payload, options = {}) {
+  const retries = Number.isInteger(options.retries) && options.retries > 0 ? options.retries : 0;
+  let lastError = null;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await remoteFetchJson(payload);
+    } catch (error) {
+      lastError = error;
+      if (attempt === retries) {
+        break;
+      }
+    }
+  }
+
+  throw lastError || new Error("remote request failed");
+}
+
 async function loadSharedState() {
   const localState = buildState(loadCatalog(), loadRecords());
 
@@ -541,22 +589,22 @@ async function saveSharedState(catalog, records) {
   }
 
   try {
-    const result = await remoteFetchJson({
+    const result = await remoteFetchJsonWithRetry({
       action: "setState",
       token: REMOTE_CONFIG.writeToken,
       state: next
-    });
+    }, { retries: 1 });
 
     if (!result || result.ok !== true) {
       throw new Error(result?.error || "remote save failed");
     }
 
     if (REMOTE_CONFIG.catalogMode === "drive-file") {
-      await remoteFetchJson({
+      await remoteFetchJsonWithRetry({
         action: "setSongCatalog",
         token: REMOTE_CONFIG.writeToken,
         catalog: pickSongCatalog(next.catalog)
-      });
+      }, { retries: 1 });
     }
 
     return { ok: true, source: "remote" };
@@ -564,7 +612,7 @@ async function saveSharedState(catalog, records) {
     return {
       ok: false,
       source: "local-only",
-      error: error instanceof Error ? error.message : String(error)
+      error: formatRemoteError(error)
     };
   }
 }
@@ -591,11 +639,11 @@ async function addSharedRecord(record) {
   }
 
   try {
-    const result = await remoteFetchJson({
+    const result = await remoteFetchJsonWithRetry({
       action: "addRecord",
       token: REMOTE_CONFIG.writeToken,
       record
-    });
+    }, { retries: 1 });
 
     if (!result || result.ok !== true) {
       throw new Error(result?.error || "remote addRecord failed");
@@ -611,7 +659,7 @@ async function addSharedRecord(record) {
     return {
       ok: false,
       source: "local-only",
-      error: error instanceof Error ? error.message : String(error)
+      error: formatRemoteError(error)
     };
   }
 }
@@ -649,11 +697,11 @@ async function saveSharedOcrLayoutConfig(config) {
   }
 
   try {
-    const result = await remoteFetchJson({
+    const result = await remoteFetchJsonWithRetry({
       action: "setOcrLayout",
       token: REMOTE_CONFIG.writeToken,
       config: normalized
-    });
+    }, { retries: 1 });
 
     if (!result || result.ok !== true) {
       throw new Error(result?.error || "remote ocr layout save failed");
@@ -667,7 +715,7 @@ async function saveSharedOcrLayoutConfig(config) {
       ok: false,
       source: "local-only",
       config: normalized,
-      error: error instanceof Error ? error.message : String(error)
+      error: formatRemoteError(error)
     };
   }
 }

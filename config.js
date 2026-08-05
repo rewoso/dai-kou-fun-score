@@ -4,5 +4,5 @@ window.DJMAX_REMOTE_CONFIG = {
     readToken: "djmax-read-token",
     writeToken: "djmax-write-token",
     catalogMode: "drive-file",
-    timeoutMs: 10000
+    timeoutMs: 45000
 };
